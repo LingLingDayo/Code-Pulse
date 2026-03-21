@@ -132,7 +132,7 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree:
 
     let supported_exts = vec!["js", "jsx", "ts", "tsx", "vue", "svelte", "py", "rs"];
 
-    let mut ignores: Vec<String> = vec![
+    let mut ignores_raw: Vec<String> = vec![
         "node_modules".to_string(), ".git".to_string(), "dist".to_string(), "target".to_string(),
         ".jpg".to_string(), ".jpeg".to_string(), ".png".to_string(), ".gif".to_string(), ".svg".to_string(), ".ico".to_string(), ".webp".to_string(),
         ".mp4".to_string(), ".avi".to_string(), ".mkv".to_string(), ".mov".to_string(), ".webm".to_string(),
@@ -142,8 +142,18 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree:
         for p in ignore_exts.split(',') {
             let s = p.trim().to_string();
             if !s.is_empty() {
-                ignores.push(s);
+                ignores_raw.push(s);
             }
+        }
+    }
+
+    let mut ignore_names = HashSet::new();
+    let mut ignore_extensions = HashSet::new();
+    for s in ignores_raw {
+        if s.starts_with('.') {
+            ignore_extensions.insert(s.to_lowercase());
+        } else {
+            ignore_names.insert(s);
         }
     }
 
@@ -159,16 +169,15 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree:
                 if e_path.is_file() {
                     let ext = e_path.extension().and_then(|e| e.to_str()).unwrap_or("");
                     if supported_exts.contains(&ext) {
-                        let path_str = e_path.to_string_lossy();
-                        if ignores.iter().any(|ig| path_str.contains(ig)) {
+                        if should_ignore(e_path, &ignore_names, &ignore_extensions) {
                             continue;
                         }
-                        process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, &ignores);
+                        process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, &ignore_names, &ignore_extensions);
                     }
                 }
             }
         } else {
-            process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, &ignores);
+            process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, &ignore_names, &ignore_extensions);
         }
     }
 
@@ -204,6 +213,27 @@ fn build_file_tree(paths: &[String]) -> String {
     tree
 }
 
+fn should_ignore(path: &Path, ignore_names: &HashSet<String>, ignore_extensions: &HashSet<String>) -> bool {
+    // Check each component (directories and filename)
+    for component in path.components() {
+        if let Some(comp_str) = component.as_os_str().to_str() {
+            if ignore_names.contains(comp_str) {
+                return true;
+            }
+        }
+    }
+
+    // Check file extension
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        let ext_with_dot = format!(".{}", ext.to_lowercase());
+        if ignore_extensions.contains(&ext_with_dot) {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn process_file(
     path: &Path, 
     current_depth: usize, 
@@ -212,15 +242,15 @@ fn process_file(
     result_blocks: &mut Vec<String>,
     parsed_paths: &mut Vec<String>,
     base_path: &Path,
-    ignores: &[String]
+    ignore_names: &HashSet<String>,
+    ignore_extensions: &HashSet<String>
 ) {
     if current_depth > max_depth || !path.exists() { return; }
     
     let abs_path = match path.canonicalize() { Ok(p) => p, Err(_) => return };
     if visited.contains(&abs_path) || abs_path.as_os_str().is_empty() { return; }
     
-    let path_str = abs_path.to_string_lossy();
-    if ignores.iter().any(|ig| path_str.contains(ig)) {
+    if should_ignore(&abs_path, ignore_names, ignore_extensions) {
         return;
     }
     
@@ -250,7 +280,7 @@ fn process_file(
         
         for dep in extract_dependencies(&content, ext) {
             if let Some(resolved) = resolve_path(base_dir, &dep, ext) {
-                process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path, ignores);
+                process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path, ignore_names, ignore_extensions);
             }
         }
     }
