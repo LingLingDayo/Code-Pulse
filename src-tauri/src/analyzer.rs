@@ -212,7 +212,7 @@ fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
             for cap in re.captures_iter(&content_lf) {
                 if let Some(m) = cap.get(1) {
                     let link = m.as_str().trim();
-                    if !link.is_empty() && !link.starts_with("http") && !link.starts_with('#') {
+                    if !link.is_empty() && !link.starts_with("http") && !link.starts_with("//") && !link.starts_with('#') {
                         let mut clean_link = link.to_string();
                         if let Some(idx) = clean_link.find(|c| c == '?' || c == '#') {
                             clean_link.truncate(idx);
@@ -228,6 +228,11 @@ fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
 }
 
 fn resolve_path(base_dir: &Path, import_path: &str, ext: &str) -> Option<PathBuf> {
+    // 忽略网络路径
+    if import_path.starts_with("http://") || import_path.starts_with("https://") || import_path.starts_with("//") {
+        return None;
+    }
+
     if !import_path.starts_with(".") && !import_path.starts_with("/") {
         return None;
     }
