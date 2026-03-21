@@ -5,7 +5,7 @@ interface TreeNode {
   name: string;
   fullPath: string;
   absPath: string;
-  originId?: string;
+  originIds: string[];
   isDirectory: boolean;
   isExpanded: boolean;
   children: Record<string, TreeNode>;
@@ -16,7 +16,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'delete', fullPath: string, absPath: string, originId?: string): void;
+  (e: 'delete', fullPath: string, absPath: string, originIds?: string[]): void;
 }>();
 
 const isExpandedLocal = ref(props.node.isExpanded);
@@ -28,11 +28,11 @@ function toggle() {
 }
 
 function handleDelete() {
-  emit('delete', props.node.fullPath, props.node.absPath, props.node.originId);
+  emit('delete', props.node.fullPath, props.node.absPath, props.node.originIds);
 }
 
-function bubbleDelete(fullPath: string, absPath: string, originId?: string) {
-  emit('delete', fullPath, absPath, originId);
+function bubbleDelete(fullPath: string, absPath: string, originIds?: string[]) {
+  emit('delete', fullPath, absPath, originIds);
 }
 </script>
 

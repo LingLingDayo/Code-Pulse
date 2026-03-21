@@ -197,29 +197,16 @@ function updateOutputContext() {
     outputContext.value = finalContext;
 }
 
-function handleNodeDelete(fullPath: string, absPath?: string, originId?: string) {
+function handleNodeDelete(fullPath: string, absPath?: string, originIds?: string[]) {
     // 1. 同步过滤 fileNodes (树里的文件)
     fileNodes.value = fileNodes.value.filter(node => 
         !(node.path === fullPath || node.path.startsWith(fullPath + '/'))
     );
 
     // 2. 联动删除 filesList (用户上传列表)
-    // 优先通过 ID 进行精准删除（如果该节点关联了某个初始上传项）
-    if (originId) {
-        filesList.value = filesList.value.filter(f => f.id !== originId);
-    } else if (absPath) {
-        // 兜底机制：如果没传 ID，则通过绝对路径归一化匹配
-        const normalize = (p: string) => {
-            if (!p) return "";
-            let n = p.replace(/^\\\\?\\/, '').replace(/^\/\/\?\//, ''); 
-            n = n.replace(/\\/g, '/').toLowerCase().trim();
-            return n.length > 3 ? n.replace(/\/+$/, '') : n;
-        };
-        const nTarget = normalize(absPath);
-        filesList.value = filesList.value.filter(f => {
-            const nf = normalize(f.path);
-            return !(nf === nTarget || nf.startsWith(nTarget + '/'));
-        });
+    // 根据 ID 列表进行精准过滤：如果 originIds 中包含了某个初始项的 ID，则该项消失
+    if (originIds && originIds.length > 0) {
+        filesList.value = filesList.value.filter(f => !originIds.includes(f.id));
     }
 
     updateOutputContext();
@@ -427,7 +414,7 @@ function handleWheel(e: WheelEvent) {
       <!-- Tree Component Sidebar -->
       <DependencyTreeSidebar 
         :fileNodes="fileNodes" 
-        @delete="(fp, ap, id) => handleNodeDelete(fp, ap, id)" 
+        @delete="(fp, ap, ids) => handleNodeDelete(fp, ap, ids)" 
         @upload-files="handleTreeUploadFiles"
       />
 

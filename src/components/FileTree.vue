@@ -6,7 +6,7 @@ interface TreeNode {
   name: string;
   fullPath: string;
   absPath: string;
-  originId?: string;
+  originIds: string[]; // 收集该节点下所有的原始来源 ID
   isDirectory: boolean;
   isExpanded: boolean;
   children: Record<string, TreeNode>;
@@ -17,7 +17,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'delete', fullPath: string, absPath: string, originId?: string): void;
+  (e: 'delete', fullPath: string, absPath: string, originIds?: string[]): void;
   (e: 'uploadFiles', files: string[], destDir: string): void;
   (e: 'updateDropTarget', target: string | null): void;
 }>();
@@ -57,17 +57,18 @@ const root = computed(() => {
           name: part,
           fullPath: currentPath,
           absPath: currentAbsPath,
-          originId: node.originId, // 绑定来源 ID
+          originIds: [],
           isDirectory,
-          isExpanded: true, // 默认展开
+          isExpanded: true,
           children: {}
         };
-      } else if (isDirectory && !currentLevel[part].isDirectory) {
-          // 在极少数情况下，可能是覆盖导致的异常，确保类型为目录
-          currentLevel[part].isDirectory = true;
-          currentLevel[part].absPath = currentAbsPath;
-          if (node.originId) currentLevel[part].originId = node.originId;
       }
+      
+      // 聚合 ID：只要该目录下包含这个原始来源的文件，该目录就记录该 ID
+      if (node.originId && !currentLevel[part].originIds.includes(node.originId)) {
+        currentLevel[part].originIds.push(node.originId);
+      }
+      
       currentLevel = currentLevel[part].children;
     });
   });
@@ -75,8 +76,8 @@ const root = computed(() => {
   return tree;
 });
 
-function handleDelete(fullPath: string, absPath: string, originId?: string) {
-  emit('delete', fullPath, absPath, originId);
+function handleDelete(fullPath: string, absPath: string, originIds?: string[]) {
+  emit('delete', fullPath, absPath, originIds);
 }
 
 function handleUploadFiles(files: string[], destDir: string) {

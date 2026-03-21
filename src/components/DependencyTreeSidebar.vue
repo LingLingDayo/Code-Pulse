@@ -6,13 +6,13 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-    (e: 'delete', fullPath: string, absPath: string, originId?: string): void;
+    (e: 'delete', fullPath: string, absPath: string, originIds?: string[]): void;
     (e: 'uploadFiles', files: string[], destDir: string): void;
     (e: 'updateDropTarget', target: string | null): void;
 }>();
 
-function handleNodeDelete(fullPath: string, absPath: string, originId?: string) {
-    emit('delete', fullPath, absPath, originId);
+function handleNodeDelete(fullPath: string, absPath: string, originIds?: string[]) {
+    emit('delete', fullPath, absPath, originIds);
 }
 
 function handleUploadFiles(files: string[], destDir: string) {
