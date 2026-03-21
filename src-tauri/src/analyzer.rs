@@ -1,4 +1,5 @@
 use regex::Regex;
+use serde::Serialize;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -160,9 +161,15 @@ fn parse_ignore_patterns(raw: &str, defaults: Vec<String>) -> (HashSet<String>, 
     (names, exts, fnames, regexes)
 }
 
-pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String, ignore_deep_parse: String, included_types: Vec<String>) -> Result<String, String> {
+#[derive(Serialize)]
+pub struct FileNode {
+    pub path: String,
+    pub content: String,
+}
+
+pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String, ignore_deep_parse: String, included_types: Vec<String>) -> Result<Vec<FileNode>, String> {
     let mut visited: HashSet<PathBuf> = HashSet::new();
-    let mut result_blocks: Vec<String> = Vec::new();
+    let mut result_blocks: Vec<FileNode> = Vec::new();
     let mut parsed_paths: Vec<String> = Vec::new();
 
     let included_types_set: HashSet<String> = if included_types.is_empty() {
@@ -219,14 +226,7 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree:
         }
     }
 
-    let mut final_blocks = Vec::new();
-    if generate_tree {
-        let tree_str = build_file_tree(&parsed_paths);
-        final_blocks.push(tree_str);
-    }
-    final_blocks.extend(result_blocks);
-
-    Ok(final_blocks.join("\n\n"))
+    Ok(result_blocks)
 }
 
 fn build_file_tree(paths: &[String]) -> String {
@@ -302,7 +302,7 @@ fn process_file(
     current_depth: usize, 
     max_depth: usize, 
     visited: &mut HashSet<PathBuf>, 
-    result_blocks: &mut Vec<String>,
+    result_blocks: &mut Vec<FileNode>,
     parsed_paths: &mut Vec<String>,
     base_path: &Path,
     ignore_names: &HashSet<String>,
@@ -345,10 +345,13 @@ fn process_file(
 
         parsed_paths.push(display_path_str.clone());
 
-        result_blocks.push(format!(
-            "========================================\n[FILE PATH]: {}\n(Dependency Layer: {})\n========================================\n[CONTENT START]\n{}\n[CONTENT END]", 
-            display_path_str, current_depth, content
-        ));
+        result_blocks.push(FileNode {
+            path: display_path_str.clone(),
+            content: format!(
+                "========================================\n[FILE PATH]: {}\n(Dependency Layer: {})\n========================================\n[CONTENT START]\n{}\n[CONTENT END]", 
+                display_path_str, current_depth, content
+            )
+        });
         
         let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("");
         

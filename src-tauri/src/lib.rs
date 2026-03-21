@@ -1,7 +1,7 @@
 mod analyzer;
 
 #[tauri::command]
-fn generate_context(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String, ignore_deep_parse: String, included_types: Vec<String>) -> Result<String, String> {
+fn generate_context(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String, ignore_deep_parse: String, included_types: Vec<String>) -> Result<Vec<analyzer::FileNode>, String> {
     analyzer::analyze_dependencies(paths, max_depth, generate_tree, ignore_exts, ignore_deep_parse, included_types)
 }
 

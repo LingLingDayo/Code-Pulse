@@ -4,8 +4,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import AppSettingsModal from "./components/AppSettingsModal.vue";
+import FileTree from "./components/FileTree.vue";
 
 const outputContext = ref("");
+const fileNodes = ref<{path: string, content: string}[]>([]);
 const isDragging = ref(false);
 const isLoading = ref(false);
 const filesList = ref<string[]>([]);
@@ -56,7 +58,7 @@ async function processPaths(paths: string[]) {
   if (paths.length === 0) return;
   isLoading.value = true;
   try {
-    const result = await invoke<string>("generate_context", {
+    const result = await invoke<Array<{path: string, content: string}>>("generate_context", {
       paths: paths,
       maxDepth: appConfig.maxDepth,
       generateTree: appConfig.generateTree,
@@ -65,7 +67,45 @@ async function processPaths(paths: string[]) {
       includedTypes: appConfig.includedTypes,
     });
     
+    fileNodes.value = result;
+    updateOutputContext();
+  } catch (error) {
+    console.error("Failed to generate context:", error);
+    outputContext.value = `Error: ${error}`;
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+function updateOutputContext() {
+    if (fileNodes.value.length === 0) {
+        outputContext.value = "";
+        return;
+    }
+
     let finalContext = "";
+
+    if (appConfig.generateTree) {
+        const paths = fileNodes.value.map(n => n.path);
+        let tree = "========================================\n[FILE TREE]\n========================================\n.\n";
+        const sortedPaths = [...paths].sort();
+        let prevComponents: string[] = [];
+        for (const path of sortedPaths) {
+            const components = path.split('/');
+            let i = 0;
+            while (i < components.length && i < prevComponents.length && components[i] === prevComponents[i]) {
+                i++;
+            }
+            while (i < components.length) {
+                const indent = "│   ".repeat(i);
+                tree += `${indent}├── ${components[i]}\n`;
+                i++;
+            }
+            prevComponents = components;
+        }
+        finalContext += tree + "\n";
+    }
+
     if (appConfig.customPrompt.trim()) {
       finalContext += "========================================\n";
       finalContext += "[SYSTEM SETTINGS]\n";
@@ -74,18 +114,20 @@ async function processPaths(paths: string[]) {
     }
 
     const PENDING_USER_PROMPT = userPrompt.value.trim();
-    const LONG_CONTEXT_THRESHOLD = 8000; // 超过约 8000 字符时，将用户需求置底，防大模型遗忘
+    const LONG_CONTEXT_THRESHOLD = 8000;
 
-    if (PENDING_USER_PROMPT && result.length <= LONG_CONTEXT_THRESHOLD) {
+    const blocksContent = fileNodes.value.map(n => n.content).join("\n\n");
+
+    if (PENDING_USER_PROMPT && blocksContent.length <= LONG_CONTEXT_THRESHOLD) {
       finalContext += "========================================\n";
       finalContext += "[USER REQUIREMENTS]\n";
       finalContext += "========================================\n";
       finalContext += PENDING_USER_PROMPT + "\n\n";
     }
 
-    finalContext += result;
+    finalContext += blocksContent;
 
-    if (PENDING_USER_PROMPT && result.length > LONG_CONTEXT_THRESHOLD) {
+    if (PENDING_USER_PROMPT && blocksContent.length > LONG_CONTEXT_THRESHOLD) {
       finalContext += "\n\n========================================\n";
       finalContext += "[USER REQUIREMENTS]\n";
       finalContext += "========================================\n";
@@ -93,12 +135,13 @@ async function processPaths(paths: string[]) {
     }
     
     outputContext.value = finalContext;
-  } catch (error) {
-    console.error("Failed to generate context:", error);
-    outputContext.value = `Error: ${error}`;
-  } finally {
-    isLoading.value = false;
-  }
+}
+
+function handleNodeDelete(fullPath: string) {
+    fileNodes.value = fileNodes.value.filter(node => 
+        !(node.path === fullPath || node.path.startsWith(fullPath + '/'))
+    );
+    updateOutputContext();
 }
 
 function handleDrop(event: DragEvent) {
@@ -184,7 +227,7 @@ async function triggerDirInput() {
     </p>
 
     <!-- Top Section: Drop Zone & User Prompt -->
-    <div class="w-full max-w-4xl flex gap-6 mb-6">
+    <div class="w-full max-w-6xl flex gap-6 mb-6">
       <!-- Left: Drop Zone -->
       <div 
         class="flex-1 h-48 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden group shadow-sm bg-slate-800/30"
@@ -235,13 +278,13 @@ async function triggerDirInput() {
     </div>
 
     <!-- Controls (Generate Button) -->
-    <div class="w-full max-w-4xl flex justify-center mb-6">
+    <div class="w-full max-w-6xl flex justify-center mb-6">
       <button 
         @click="processPaths(filesList)"
         :disabled="filesList.length === 0 || isLoading"
-        class="px-8 py-3 w-full sm:w-auto min-w-50 flex justify-center bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-blue-500/20 transition-all active:scale-95"
+        class="h-[52px] px-8 w-full sm:w-auto min-w-50 flex items-center justify-center bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-blue-500/20 transition-all active:scale-95"
       >
-        <span v-if="isLoading" class="flex items-center">
+        <span v-if="isLoading" class="flex items-center text-lg">
             <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -253,34 +296,49 @@ async function triggerDirInput() {
     </div>
 
     <!-- Output Area -->
-    <div class="w-full max-w-4xl relative flex-1 flex flex-col min-h-[400px]">
-      <div class="flex justify-between items-center bg-slate-800/80 backdrop-blur-md px-4 py-2.5 border-t border-x border-slate-700 rounded-t-xl">
-        <span class="text-sm font-semibold text-slate-400 flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
-            输出上下文 (Generated Context)
-            <span v-if="outputContext" class="ml-3 text-[10px] bg-slate-700/50 px-2 py-0.5 rounded-full border border-slate-600/50 text-slate-400 font-mono">
-              {{ totalCharacters.toLocaleString() }} 字
-            </span>
-        </span>
-        <button 
-          @click="copyToClipboard"
-          class="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-sm font-medium rounded-md transition-colors active:bg-slate-800"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-          <span class="text-slate-200">一键复制</span>
-        </button>
-      </div>
-      <textarea 
-        readonly
-        v-model="outputContext"
-        placeholder="解析后的所有代码将合并展示在这里..."
-        class="w-full flex-1 p-4 bg-[#0d1117] border border-slate-700 rounded-b-xl focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-sm text-green-400 leading-relaxed resize-none shadow-inner"
-      ></textarea>
+    <div class="w-full max-w-6xl relative flex-1 flex min-h-[400px] gap-4 mb-4">
       
-      <!-- Loading Overlay -->
-      <div v-if="isLoading" class="absolute inset-0 top-[45px] flex flex-col items-center justify-center bg-slate-900/60 backdrop-blur-sm rounded-b-xl z-20">
-         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-         <p class="text-blue-300 font-medium tracking-widest animate-pulse">深度分析中，请耐心等待...</p>
+      <!-- Tree Component Sidebar -->
+      <div class="w-1/3 min-w-[250px] flex flex-col bg-[#0d1117] border border-slate-700 rounded-xl overflow-hidden shadow-inner shrink-0">
+        <div class="px-4 py-2.5 bg-slate-800/80 backdrop-blur-md border-b border-slate-700 flex items-center justify-between z-10">
+            <span class="text-sm font-semibold text-slate-400">依赖文件树</span>
+            <span class="text-[10px] bg-slate-700 w-fit text-slate-300 font-mono px-2 py-0.5 rounded-full">{{ fileNodes.length }} 项</span>
+        </div>
+        <div class="flex-1 overflow-y-auto p-2 relative custom-scrollbar">
+            <FileTree :paths="fileNodes.map(n => n.path)" @delete="handleNodeDelete" />
+        </div>
+      </div>
+
+      <!-- Context Textarea -->
+      <div class="flex-1 flex flex-col relative w-full overflow-hidden">
+        <div class="flex justify-between items-center bg-slate-800/80 backdrop-blur-md px-4 py-2.5 border-t border-x border-slate-700 rounded-t-xl z-10">
+          <span class="text-sm font-semibold text-slate-400 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+              输出上下文
+              <span v-if="outputContext" class="ml-3 text-[10px] bg-slate-700/50 px-2 py-0.5 rounded-full border border-slate-600/50 text-slate-400 font-mono">
+                {{ totalCharacters.toLocaleString() }} 字
+              </span>
+          </span>
+          <button 
+            @click="copyToClipboard"
+            class="p-2 bg-slate-700 hover:bg-slate-600 rounded-md transition-colors active:bg-slate-800"
+            title="一键复制"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+          </button>
+        </div>
+        <textarea 
+          readonly
+          v-model="outputContext"
+          placeholder="解析后的所有代码将合并展示在这里..."
+          class="w-full flex-1 p-4 bg-[#0d1117] border border-slate-700 rounded-b-xl focus:outline-none font-mono text-sm text-green-400 leading-relaxed resize-none shadow-inner z-0"
+        ></textarea>
+        
+        <!-- Loading Overlay -->
+        <div v-if="isLoading" class="absolute inset-0 top-[45px] flex flex-col items-center justify-center bg-slate-900/60 backdrop-blur-sm rounded-b-xl z-20">
+          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+          <p class="text-blue-300 font-medium tracking-widest animate-pulse">深度分析中，请耐心等待...</p>
+        </div>
       </div>
     </div>
 
@@ -293,19 +351,19 @@ async function triggerDirInput() {
 </template>
 
 <style>
-/* Custom Scrollbar for Textarea */
-textarea::-webkit-scrollbar {
+/* Custom Scrollbar for Textarea and Tree */
+textarea::-webkit-scrollbar, .custom-scrollbar::-webkit-scrollbar {
   width: 8px;
 }
-textarea::-webkit-scrollbar-track {
+textarea::-webkit-scrollbar-track, .custom-scrollbar::-webkit-scrollbar-track {
   background: #0d1117;
   border-bottom-right-radius: 0.75rem;
 }
-textarea::-webkit-scrollbar-thumb {
+textarea::-webkit-scrollbar-thumb, .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #334155;
   border-radius: 4px;
 }
-textarea::-webkit-scrollbar-thumb:hover {
+textarea::-webkit-scrollbar-thumb:hover, .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
 </style>
