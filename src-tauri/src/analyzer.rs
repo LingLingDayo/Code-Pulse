@@ -34,7 +34,7 @@ static MD_RE: OnceLock<Regex> = OnceLock::new();
 
 fn get_js_re() -> &'static Regex {
     JS_RE.get_or_init(|| {
-        Regex::new(r#"(?:import.*from\s+['"]([^'"]+)['"]|require\(['"]([^'"]+)['"]\)|import\s+['"]([^'"]+)['"])"#).unwrap()
+        Regex::new(r#"(?:(?:import|export).*from\s+['"]([^'"]+)['"]|require\(['"]([^'"]+)['"]\)|import\s+['"]([^'"]+)['"])"#).unwrap()
     })
 }
 
@@ -126,7 +126,15 @@ fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
             let re = get_py_re();
             for cap in re.captures_iter(&content_lf) {
                 if let Some(m) = cap.get(1) {
-                    deps.push(m.as_str().replace('.', "/"));
+                    let mut s = m.as_str().to_string();
+                    if s.starts_with(".") {
+                        let count = s.chars().take_while(|&c| c == '.').count();
+                        let prefix = if count == 1 { "./".to_string() } else { "../".repeat(count - 1) };
+                        s = format!("{}{}", prefix, s[count..].replace('.', "/"));
+                    } else {
+                        s = s.replace('.', "/");
+                    }
+                    deps.push(s);
                 }
             }
         }
@@ -134,7 +142,13 @@ fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
             let re = get_rs_re();
             for cap in re.captures_iter(&content_lf) {
                 if let Some(m) = cap.get(1) {
-                    deps.push(m.as_str().replace("::", "/"));
+                    let mut s = m.as_str().replace("::", "/");
+                    if s.starts_with("super/") {
+                        s = s.replacen("super/", "../", 1);
+                    } else if s.starts_with("self/") {
+                        s = s.replacen("self/", "./", 1);
+                    }
+                    deps.push(s);
                 }
             }
         }
@@ -227,21 +241,12 @@ fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
     deps
 }
 
-fn resolve_path(base_dir: &Path, import_path: &str, ext: &str) -> Option<PathBuf> {
+fn resolve_path(base_dir: &Path, import_path: &str, ext: &str, project_root: &Path) -> Option<PathBuf> {
     // 忽略网络路径
     if import_path.starts_with("http://") || import_path.starts_with("https://") || import_path.starts_with("//") {
         return None;
     }
 
-    if !import_path.starts_with(".") && !import_path.starts_with("/") {
-        return None;
-    }
-    
-    let target = base_dir.join(import_path);
-    if target.exists() && target.is_file() {
-        return Some(target);
-    }
-    
     let extensions = match ext {
         "js" | "mjs" | "jsx" | "ts" | "tsx" | "vue" | "svelte" => vec!["ts", "js", "mjs", "tsx", "jsx", "vue", "svelte"],
         "py" => vec!["py"],
@@ -258,23 +263,47 @@ fn resolve_path(base_dir: &Path, import_path: &str, ext: &str) -> Option<PathBuf
         _ => vec![],
     };
 
-    for e in &extensions {
-        let with_ext = target.with_extension(e);
-        if with_ext.exists() {
-            return Some(with_ext);
+    let check_target = |t: &Path| -> Option<PathBuf> {
+        if t.exists() && t.is_file() {
+            return Some(t.to_path_buf());
         }
-    }
-    
-    if target.is_dir() {
         for e in &extensions {
-            let index_path = target.join(format!("index.{}", e));
-            if index_path.exists() {
-                return Some(index_path);
+            let with_ext = t.with_extension(e);
+            if with_ext.exists() {
+                return Some(with_ext);
             }
         }
-    }
+        
+        if t.is_dir() {
+            for e in &extensions {
+                let index_path = t.join(format!("index.{}", e));
+                if index_path.exists() {
+                    return Some(index_path);
+                }
+            }
+        }
+        None
+    };
 
-    None
+    if import_path.starts_with("crate/") {
+        check_target(&project_root.join("src").join(&import_path[6..]))
+    } else if import_path.starts_with("@/") {
+        check_target(&project_root.join("src").join(&import_path[2..]))
+    } else if import_path.starts_with("~/") {
+        check_target(&project_root.join(&import_path[2..]))
+    } else if import_path.starts_with("/") {
+        check_target(&project_root.join(&import_path[1..]))
+    } else if import_path.starts_with(".") {
+        check_target(&base_dir.join(import_path))
+    } else {
+        if let Some(res) = check_target(&base_dir.join(import_path)) {
+            Some(res)
+        } else if let Some(res) = check_target(&project_root.join(import_path)) {
+            Some(res)
+        } else {
+            check_target(&project_root.join("src").join(import_path))
+        }
+    }
 }
 
 fn find_project_root(start_path: &Path) -> PathBuf {
@@ -540,7 +569,7 @@ fn process_file(
         if !should_ignore(&abs_path, ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes) {
             let base_dir = abs_path.parent().unwrap_or(Path::new(""));
             for dep in extract_dependencies(&content, ext) {
-                if let Some(resolved) = resolve_path(base_dir, &dep, ext) {
+                if let Some(resolved) = resolve_path(base_dir, &dep, ext, base_path) {
                     process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path, 
                         ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
                         ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,

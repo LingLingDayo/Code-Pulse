@@ -384,7 +384,7 @@ function handleWheel(e: WheelEvent) {
       <div class="flex-1 h-48 flex flex-col">
         <textarea 
           v-model="userPrompt"
-          placeholder="在此输入您的自定义需求、提示词...（将自动添加至最终生成的代码上下文合适位置）"
+          placeholder="在此输入您的自定义需求、提示词...（将自动添加至最终生成的代码上下文的合适位置）"
           class="w-full h-full p-4 bg-slate-800/30 border-2 border-slate-600 rounded-2xl resize-none text-slate-200 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-slate-800/50 transition-all font-sans text-sm shadow-sm"
         ></textarea>
       </div>
