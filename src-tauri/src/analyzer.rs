@@ -125,37 +125,65 @@ fn find_project_root(start_path: &Path) -> PathBuf {
     }
 }
 
-pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String) -> Result<String, String> {
+fn parse_ignore_patterns(raw: &str, defaults: Vec<String>) -> (HashSet<String>, HashSet<String>, HashSet<String>, Vec<Regex>) {
+    let mut names = HashSet::new();
+    let mut exts = HashSet::new();
+    let mut fnames = HashSet::new();
+    let mut regexes = Vec::new();
+
+    let mut all_patterns = defaults;
+    if !raw.is_empty() {
+        for p in raw.split(|c| c == ',' || c == '\n' || c == '\r') {
+            let s = p.trim().to_string();
+            if !s.is_empty() {
+                all_patterns.push(s);
+            }
+        }
+    }
+
+    for s in all_patterns {
+        if s.contains('*') {
+            let mut escaped = regex::escape(&s);
+            escaped = escaped.replace("\\*", ".*");
+            let pattern = format!("^{}$", escaped);
+            if let Ok(re) = Regex::new(&pattern) {
+                regexes.push(re);
+            }
+        } else if s.starts_with('.') {
+            exts.insert(s.to_lowercase());
+        } else if s.contains('.') {
+            fnames.insert(s);
+        } else {
+            names.insert(s);
+        }
+    }
+    (names, exts, fnames, regexes)
+}
+
+pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String, ignore_deep_parse: String) -> Result<String, String> {
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut result_blocks: Vec<String> = Vec::new();
     let mut parsed_paths: Vec<String> = Vec::new();
 
     let supported_exts = vec!["js", "jsx", "ts", "tsx", "vue", "svelte", "py", "rs"];
 
-    let mut ignores_raw: Vec<String> = vec![
-        "node_modules".to_string(), ".git".to_string(), "dist".to_string(), "target".to_string(),
-        ".jpg".to_string(), ".jpeg".to_string(), ".png".to_string(), ".gif".to_string(), ".svg".to_string(), ".ico".to_string(), ".webp".to_string(),
-        ".mp4".to_string(), ".avi".to_string(), ".mkv".to_string(), ".mov".to_string(), ".webm".to_string(),
-        ".mp3".to_string(), ".wav".to_string(), ".flac".to_string(), ".aac".to_string(), ".ogg".to_string(),
-    ];
-    if !ignore_exts.is_empty() {
-        for p in ignore_exts.split(',') {
-            let s = p.trim().to_string();
-            if !s.is_empty() {
-                ignores_raw.push(s);
-            }
-        }
-    }
+    let ignores_defaults: Vec<String> = vec![
+        "node_modules", ".git", "dist", "target", "build", ".vscode", ".idea", 
+        ".next", ".nuxt", ".output", ".vercel", ".github", 
+        "*.lock", "*-lock.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+        ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".webp",
+        ".mp4", ".avi", ".mkv", ".mov", ".webm",
+        ".mp3", ".wav", ".flac", ".aac", ".ogg",
+        ".zip", ".tar", ".gz", ".7z", ".rar",
+        ".exe", ".dll", ".so", ".dylib",
+        ".log", ".tmp", ".temp", ".swp", ".DS_Store"
+    ].into_iter().map(|s| s.to_string()).collect();
 
-    let mut ignore_names = HashSet::new();
-    let mut ignore_extensions = HashSet::new();
-    for s in ignores_raw {
-        if s.starts_with('.') {
-            ignore_extensions.insert(s.to_lowercase());
-        } else {
-            ignore_names.insert(s);
-        }
-    }
+    let (ignore_names, ignore_extensions, ignore_filenames, ignore_regexes) = 
+        parse_ignore_patterns(&ignore_exts, ignores_defaults);
+
+    let (ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes) = 
+        parse_ignore_patterns(&ignore_deep_parse, vec![]);
 
     for p_str in paths {
         let path = Path::new(&p_str);
@@ -169,15 +197,19 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree:
                 if e_path.is_file() {
                     let ext = e_path.extension().and_then(|e| e.to_str()).unwrap_or("");
                     if supported_exts.contains(&ext) {
-                        if should_ignore(e_path, &ignore_names, &ignore_extensions) {
+                        if should_ignore(e_path, &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes) {
                             continue;
                         }
-                        process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, &ignore_names, &ignore_extensions);
+                        process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, 
+                            &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes,
+                            &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes);
                     }
                 }
             }
         } else {
-            process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, &ignore_names, &ignore_extensions);
+            process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, 
+                &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes,
+                &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes);
         }
     }
 
@@ -213,21 +245,46 @@ fn build_file_tree(paths: &[String]) -> String {
     tree
 }
 
-fn should_ignore(path: &Path, ignore_names: &HashSet<String>, ignore_extensions: &HashSet<String>) -> bool {
-    // Check each component (directories and filename)
+fn should_ignore(
+    path: &Path, 
+    ignore_names: &HashSet<String>, 
+    ignore_extensions: &HashSet<String>, 
+    ignore_filenames: &HashSet<String>,
+    ignore_regexes: &[Regex]
+) -> bool {
+    let fname = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+    let fname_lower = fname.to_lowercase();
+
+    // 1. Check dot-prefixed patterns (suffix match)
+    for ext in ignore_extensions {
+        if fname_lower.ends_with(ext) {
+            return true;
+        }
+    }
+
+    // 2. Check full filename match
+    if ignore_filenames.contains(fname) {
+        return true;
+    }
+
+    // 3. Check regexes against filename
+    for re in ignore_regexes {
+        if re.is_match(fname) {
+            return true;
+        }
+    }
+
+    // 4. Check each component for patterns (directory/file match)
     for component in path.components() {
         if let Some(comp_str) = component.as_os_str().to_str() {
             if ignore_names.contains(comp_str) {
                 return true;
             }
-        }
-    }
-
-    // Check file extension
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        let ext_with_dot = format!(".{}", ext.to_lowercase());
-        if ignore_extensions.contains(&ext_with_dot) {
-            return true;
+            for re in ignore_regexes {
+                if re.is_match(comp_str) {
+                    return true;
+                }
+            }
         }
     }
 
@@ -243,14 +300,20 @@ fn process_file(
     parsed_paths: &mut Vec<String>,
     base_path: &Path,
     ignore_names: &HashSet<String>,
-    ignore_extensions: &HashSet<String>
+    ignore_extensions: &HashSet<String>,
+    ignore_filenames: &HashSet<String>,
+    ignore_regexes: &[Regex],
+    ignore_deep_names: &HashSet<String>,
+    ignore_deep_extensions: &HashSet<String>,
+    ignore_deep_filenames: &HashSet<String>,
+    ignore_deep_regexes: &[Regex]
 ) {
     if current_depth > max_depth || !path.exists() { return; }
     
     let abs_path = match path.canonicalize() { Ok(p) => p, Err(_) => return };
     if visited.contains(&abs_path) || abs_path.as_os_str().is_empty() { return; }
     
-    if should_ignore(&abs_path, ignore_names, ignore_extensions) {
+    if should_ignore(&abs_path, ignore_names, ignore_extensions, ignore_filenames, ignore_regexes) {
         return;
     }
     
@@ -276,11 +339,15 @@ fn process_file(
         ));
         
         let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        let base_dir = abs_path.parent().unwrap_or(Path::new(""));
         
-        for dep in extract_dependencies(&content, ext) {
-            if let Some(resolved) = resolve_path(base_dir, &dep, ext) {
-                process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path, ignore_names, ignore_extensions);
+        if !should_ignore(&abs_path, ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes) {
+            let base_dir = abs_path.parent().unwrap_or(Path::new(""));
+            for dep in extract_dependencies(&content, ext) {
+                if let Some(resolved) = resolve_path(base_dir, &dep, ext) {
+                    process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path, 
+                        ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
+                        ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes);
+                }
             }
         }
     }

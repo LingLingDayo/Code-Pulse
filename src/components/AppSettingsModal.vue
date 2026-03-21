@@ -35,17 +35,19 @@ const settingsGroups = [
       },
       {
         id: 'ignoreExts',
-        type: 'input',
+        type: 'textarea',
         label: '忽略后缀或目录',
-        description: '通过英文逗号分隔，匹配的目录或文件将不被解析。',
-        placeholder: '.git, node_modules, dist, target'
+        description: '可通过英文逗号或换行分隔，支持使用 * 通配符匹配（如 *.log, test-* 等）。',
+        placeholder: '.git, node_modules, dist, target, build',
+        rows: 4
       },
       {
         id: 'ignoreDeepParse',
-        type: 'input',
-        label: '不进行深层解析的忽略后缀或目录',
-        description: '通过英文逗号分隔，匹配的目录或文件将不进行深层递归解析。',
-        placeholder: ''
+        type: 'textarea',
+        label: '不进行深层解析的忽略配置',
+        description: '可通过英文逗号或换行分隔，支持使用 *。匹配到的文件将作为终端上下文，但不继续向下深挖。',
+        placeholder: '',
+        rows: 3
       },
       {
         id: 'customPrompt',

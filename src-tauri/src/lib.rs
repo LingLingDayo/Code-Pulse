@@ -1,8 +1,8 @@
 mod analyzer;
 
 #[tauri::command]
-fn generate_context(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String) -> Result<String, String> {
-    analyzer::analyze_dependencies(paths, max_depth, generate_tree, ignore_exts)
+fn generate_context(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String, ignore_deep_parse: String) -> Result<String, String> {
+    analyzer::analyze_dependencies(paths, max_depth, generate_tree, ignore_exts, ignore_deep_parse)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
