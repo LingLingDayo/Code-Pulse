@@ -6,17 +6,18 @@ interface TreeNode {
   name: string;
   fullPath: string;
   absPath: string;
+  originId?: string;
   isDirectory: boolean;
   isExpanded: boolean;
   children: Record<string, TreeNode>;
 }
 
 const props = defineProps<{
-  nodes: {path: string, content: string, abs_path: string}[];
+  nodes: {path: string, content: string, abs_path: string, originId?: string}[];
 }>();
 
 const emit = defineEmits<{
-  (e: 'delete', fullPath: string): void;
+  (e: 'delete', fullPath: string, absPath: string, originId?: string): void;
   (e: 'uploadFiles', files: string[], destDir: string): void;
   (e: 'updateDropTarget', target: string | null): void;
 }>();
@@ -56,6 +57,7 @@ const root = computed(() => {
           name: part,
           fullPath: currentPath,
           absPath: currentAbsPath,
+          originId: node.originId, // 绑定来源 ID
           isDirectory,
           isExpanded: true, // 默认展开
           children: {}
@@ -64,6 +66,7 @@ const root = computed(() => {
           // 在极少数情况下，可能是覆盖导致的异常，确保类型为目录
           currentLevel[part].isDirectory = true;
           currentLevel[part].absPath = currentAbsPath;
+          if (node.originId) currentLevel[part].originId = node.originId;
       }
       currentLevel = currentLevel[part].children;
     });
@@ -72,8 +75,8 @@ const root = computed(() => {
   return tree;
 });
 
-function handleDelete(fullPath: string) {
-  emit('delete', fullPath);
+function handleDelete(fullPath: string, absPath: string, originId?: string) {
+  emit('delete', fullPath, absPath, originId);
 }
 
 function handleUploadFiles(files: string[], destDir: string) {

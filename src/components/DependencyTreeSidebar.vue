@@ -2,17 +2,17 @@
 import FileTree from './FileTree.vue';
 
 const props = defineProps<{
-    fileNodes: { path: string, content: string, abs_path: string }[];
+    fileNodes: { path: string, content: string, abs_path: string, originId?: string }[];
 }>();
 
 const emit = defineEmits<{
-    (e: 'delete', fullPath: string): void;
+    (e: 'delete', fullPath: string, absPath: string, originId?: string): void;
     (e: 'uploadFiles', files: string[], destDir: string): void;
     (e: 'updateDropTarget', target: string | null): void;
 }>();
 
-function handleNodeDelete(fullPath: string) {
-    emit('delete', fullPath);
+function handleNodeDelete(fullPath: string, absPath: string, originId?: string) {
+    emit('delete', fullPath, absPath, originId);
 }
 
 function handleUploadFiles(files: string[], destDir: string) {

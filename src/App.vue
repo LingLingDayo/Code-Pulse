@@ -7,10 +7,10 @@ import AppSettingsModal from "./components/AppSettingsModal.vue";
 import DependencyTreeSidebar from "./components/DependencyTreeSidebar.vue";
 
 const outputContext = ref("");
-const fileNodes = ref<{path: string, content: string, abs_path: string}[]>([]);
+const fileNodes = ref<{path: string, content: string, abs_path: string, originId?: string}[]>([]);
 const isDragging = ref(false);
 const isLoading = ref(false);
-const filesList = ref<string[]>([]);
+const filesList = ref<{id: string, path: string}[]>([]);
 const isSettingsOpen = ref(false);
 const userPrompt = ref("");
 const isEditing = ref(false);
@@ -75,8 +75,13 @@ onMounted(async () => {
 
       if (paths && paths.length > 0) {
         if (dropZone) {
-          filesList.value = paths;
-          if (appConfig.autoGenerate) processPaths(paths);
+          const newItems = (paths as string[]).map((p: string) => ({
+            id: Math.random().toString(36).substring(2, 11),
+            path: p
+          }));
+          // 如果 autoGenerate 为 true，且原本列表为空，则直接替换；否则添加（类似追加行为，但根据原有逻辑 filesList.value = paths 是替换）
+          filesList.value = newItems;
+          if (appConfig.autoGenerate) processPaths(newItems.map((i: {path: string}) => i.path));
         } else if (nodeZone) {
           const destDir = nodeZone.dataset.dropPath;
           if (destDir) handleTreeUploadFiles(paths, destDir);
@@ -111,9 +116,20 @@ async function processPaths(paths: string[]) {
       includedTypes: finalIncludedTypes,
     });
     
-    fileNodes.value = result;
+    fileNodes.value = result.map(node => {
+        // 在前端为每个解析出的文件节点注入来源上传项的 ID
+        const normalize = (p: string) => p.replace(/\\/g, '/').toLowerCase().trim().replace(/^\\\\?\\/, '').replace(/^\/\/\?\//, '').replace(/\/+$/, '');
+        const nNodeAbs = normalize(node.abs_path);
+        
+        const origin = filesList.value.find(f => {
+            const nf = normalize(f.path);
+            return nNodeAbs === nf || nNodeAbs.startsWith(nf + '/');
+        });
+        
+        return { ...node, originId: origin?.id };
+    });
     updateOutputContext();
-  } catch (error) {
+} catch (error) {
     console.error("Failed to generate context:", error);
     outputContext.value = `Error: ${error}`;
   } finally {
@@ -181,10 +197,31 @@ function updateOutputContext() {
     outputContext.value = finalContext;
 }
 
-function handleNodeDelete(fullPath: string) {
+function handleNodeDelete(fullPath: string, absPath?: string, originId?: string) {
+    // 1. 同步过滤 fileNodes (树里的文件)
     fileNodes.value = fileNodes.value.filter(node => 
         !(node.path === fullPath || node.path.startsWith(fullPath + '/'))
     );
+
+    // 2. 联动删除 filesList (用户上传列表)
+    // 优先通过 ID 进行精准删除（如果该节点关联了某个初始上传项）
+    if (originId) {
+        filesList.value = filesList.value.filter(f => f.id !== originId);
+    } else if (absPath) {
+        // 兜底机制：如果没传 ID，则通过绝对路径归一化匹配
+        const normalize = (p: string) => {
+            if (!p) return "";
+            let n = p.replace(/^\\\\?\\/, '').replace(/^\/\/\?\//, ''); 
+            n = n.replace(/\\/g, '/').toLowerCase().trim();
+            return n.length > 3 ? n.replace(/\/+$/, '') : n;
+        };
+        const nTarget = normalize(absPath);
+        filesList.value = filesList.value.filter(f => {
+            const nf = normalize(f.path);
+            return !(nf === nTarget || nf.startsWith(nTarget + '/'));
+        });
+    }
+
     updateOutputContext();
 }
 
@@ -198,12 +235,15 @@ async function handleTreeUploadFiles(files: string[], destDir: string) {
         if (newPaths && newPaths.length > 0) {
             // 将新路径添加进 filesList
             for (const p of newPaths) {
-                if (!filesList.value.includes(p)) {
-                    filesList.value.push(p);
+                if (!filesList.value.find(f => f.path === p)) {
+                    filesList.value.push({
+                        id: Math.random().toString(36).substring(2, 11),
+                        path: p
+                    });
                 }
             }
             // 无论 autoGenerate 是否开启，都需要更新结果
-            await processPaths(filesList.value);
+            await processPaths(filesList.value.map(f => f.path));
         }
     } catch (e) {
         console.error("Upload failed:", e);
@@ -237,11 +277,11 @@ async function triggerFileInput() {
         directory: false,
     });
     if (selected && Array.isArray(selected)) {
-        filesList.value = selected;
-        if (appConfig.autoGenerate) processPaths(selected);
+        filesList.value = (selected as string[]).map((p: string) => ({ id: Math.random().toString(36).substring(2, 11), path: p }));
+        if (appConfig.autoGenerate) processPaths(selected as string[]);
     } else if (selected && typeof selected === 'string') {
-        filesList.value = [selected];
-        if (appConfig.autoGenerate) processPaths([selected]);
+        filesList.value = [{ id: Math.random().toString(36).substring(2, 11), path: selected as string }];
+        if (appConfig.autoGenerate) processPaths([selected as string]);
     }
 }
 
@@ -251,11 +291,11 @@ async function triggerDirInput() {
         directory: true,
     });
     if (selected && Array.isArray(selected)) {
-        filesList.value = selected;
-        if (appConfig.autoGenerate) processPaths(selected);
+        filesList.value = (selected as string[]).map((p: string) => ({ id: Math.random().toString(36).substring(2, 11), path: p }));
+        if (appConfig.autoGenerate) processPaths(selected as string[]);
     } else if (selected && typeof selected === 'string') {
-        filesList.value = [selected];
-        if (appConfig.autoGenerate) processPaths([selected]);
+        filesList.value = [{ id: Math.random().toString(36).substring(2, 11), path: selected as string }];
+        if (appConfig.autoGenerate) processPaths([selected as string]);
     }
 }
 
@@ -266,7 +306,7 @@ function removeFile(index: number) {
             fileNodes.value = [];
             updateOutputContext();
         } else {
-            processPaths(filesList.value);
+            processPaths(filesList.value.map((f: {path: string}) => f.path));
         }
     }
 }
@@ -344,7 +384,7 @@ function handleWheel(e: WheelEvent) {
               title="点击移除此文件/目录"
             >
                 <span class="truncate max-w-[180px] group-hover/item:text-red-400">
-                    {{ file.split('/').pop()?.split('\\').pop() }}
+                    {{ file.path.split('/').pop()?.split('\\').pop() }}
                 </span>
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 ml-1.5 text-slate-500 group-hover/item:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -366,7 +406,7 @@ function handleWheel(e: WheelEvent) {
     <!-- Controls (Generate Button) -->
     <div class="w-full max-w-6xl flex justify-center mb-6">
       <button 
-        @click="processPaths(filesList)"
+        @click="processPaths(filesList.map((f: {path: string}) => f.path))"
         :disabled="filesList.length === 0 || isLoading"
         class="h-[52px] px-8 w-full sm:w-auto min-w-50 flex items-center justify-center bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-blue-500/20 transition-all active:scale-95"
       >
@@ -387,7 +427,7 @@ function handleWheel(e: WheelEvent) {
       <!-- Tree Component Sidebar -->
       <DependencyTreeSidebar 
         :fileNodes="fileNodes" 
-        @delete="handleNodeDelete" 
+        @delete="(fp, ap, id) => handleNodeDelete(fp, ap, id)" 
         @upload-files="handleTreeUploadFiles"
       />
 
