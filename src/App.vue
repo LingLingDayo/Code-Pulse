@@ -10,6 +10,8 @@ const isDragging = ref(false);
 const isLoading = ref(false);
 const filesList = ref<string[]>([]);
 const isSettingsOpen = ref(false);
+const userPrompt = ref("");
+
 
 const appConfig = reactive({
   maxDepth: 2,
@@ -58,7 +60,17 @@ async function processPaths(paths: string[]) {
       ignoreDeepParse: appConfig.ignoreDeepParse,
       includedTypes: appConfig.includedTypes,
     });
-    outputContext.value = result;
+    
+    let finalContext = "";
+    if (userPrompt.value.trim()) {
+      finalContext += userPrompt.value.trim() + "\n\n";
+    }
+    if (appConfig.customPrompt.trim()) {
+      finalContext += appConfig.customPrompt.trim() + "\n\n";
+    }
+    finalContext += result;
+    
+    outputContext.value = finalContext;
   } catch (error) {
     console.error("Failed to generate context:", error);
     outputContext.value = `Error: ${error}`;
@@ -149,42 +161,54 @@ async function triggerDirInput() {
       拖拽代码文件或项目目录，一键深度递归解析依赖，自动生成供大语言模型阅读的完整代码上下文。
     </p>
 
-    <!-- Drop Zone -->
-    <div 
-      class="w-full max-w-4xl h-48 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center transition-all duration-300 mb-6 relative overflow-hidden group shadow-sm bg-slate-800/30"
-      :class="isDragging ? 'border-blue-400 bg-blue-900/10 scale-[1.01] shadow-blue-500/10' : 'border-slate-600 hover:border-slate-400 hover:bg-slate-800/50'"
-      @dragover.prevent="isDragging = true"
-      @dragleave.prevent="isDragging = false"
-      @drop="handleDrop"
-    >
-      <div class="pointer-events-none flex flex-col items-center space-y-3 z-10 w-full px-4">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-slate-400 group-hover:text-blue-400 transition-colors drop-shadow-md" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-        </svg>
-        <p class="text-lg font-medium text-slate-300 group-hover:text-blue-300 transition-colors tracking-wide">
-          {{ isDragging ? '松开以解析文件...' : '拖拽 文件 或 项目目录 到此处' }}
-        </p>
-      </div>
-      <!-- Clickable Actions -->
-      <div v-if="!isDragging" class="flex mt-4 space-x-4 z-20">
-        <button 
-          @click="triggerFileInput"
-          class="px-4 py-1.5 bg-slate-700/80 hover:bg-slate-600 text-sm text-slate-200 font-medium rounded-md shadow-sm border border-slate-600 transition-colors"
-        >
-          📄 选择文件
-        </button>
-        <button 
-          @click="triggerDirInput"
-          class="px-4 py-1.5 bg-slate-700/80 hover:bg-slate-600 text-sm text-slate-200 font-medium rounded-md shadow-sm border border-slate-600 transition-colors"
-        >
-          📁 选择目录
-        </button>
+    <!-- Top Section: Drop Zone & User Prompt -->
+    <div class="w-full max-w-4xl flex gap-6 mb-6">
+      <!-- Left: Drop Zone -->
+      <div 
+        class="flex-1 h-48 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden group shadow-sm bg-slate-800/30"
+        :class="isDragging ? 'border-blue-400 bg-blue-900/10 scale-[1.01] shadow-blue-500/10' : 'border-slate-600 hover:border-slate-400 hover:bg-slate-800/50'"
+        @dragover.prevent="isDragging = true"
+        @dragleave.prevent="isDragging = false"
+        @drop="handleDrop"
+      >
+        <div class="pointer-events-none flex flex-col items-center space-y-3 z-10 w-full px-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-slate-400 group-hover:text-blue-400 transition-colors drop-shadow-md" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          <p class="text-lg font-medium text-slate-300 group-hover:text-blue-300 transition-colors tracking-wide">
+            {{ isDragging ? '松开以解析文件...' : '拖拽 文件 或 目录' }}
+          </p>
+        </div>
+        <!-- Clickable Actions -->
+        <div v-if="!isDragging" class="flex mt-4 space-x-4 z-20">
+          <button 
+            @click="triggerFileInput"
+            class="px-4 py-1.5 bg-slate-700/80 hover:bg-slate-600 text-sm text-slate-200 font-medium rounded-md shadow-sm border border-slate-600 transition-colors"
+          >
+            📄 文件
+          </button>
+          <button 
+            @click="triggerDirInput"
+            class="px-4 py-1.5 bg-slate-700/80 hover:bg-slate-600 text-sm text-slate-200 font-medium rounded-md shadow-sm border border-slate-600 transition-colors"
+          >
+            📁 目录
+          </button>
+        </div>
+
+        <div v-if="filesList.length > 0 && !isDragging" class="flex flex-wrap gap-2 justify-center max-w-full overflow-hidden mt-3 z-10 opacity-75 hover:opacity-100 transition-opacity">
+            <span v-for="(file, idx) in filesList" :key="idx" class="text-xs bg-slate-700/80 px-2 py-1 rounded border border-slate-600 truncate max-w-[150px] text-slate-300 font-mono">
+                {{ file.split('/').pop()?.split('\\').pop() }}
+            </span>
+        </div>
       </div>
 
-      <div v-if="filesList.length > 0 && !isDragging" class="flex flex-wrap gap-2 justify-center max-w-full overflow-hidden mt-3 z-10 opacity-75 hover:opacity-100 transition-opacity">
-          <span v-for="(file, idx) in filesList" :key="idx" class="text-xs bg-slate-700/80 px-2 py-1 rounded border border-slate-600 truncate max-w-[200px] text-slate-300 font-mono">
-              {{ file.split('/').pop()?.split('\\').pop() }}
-          </span>
+      <!-- Right: User Prompt Textarea -->
+      <div class="flex-1 h-48 flex flex-col">
+        <textarea 
+          v-model="userPrompt"
+          placeholder="在此输入您的自定义需求、提示词...（将自动添加至最终生成的代码上下文最顶部）"
+          class="w-full h-full p-4 bg-slate-800/30 border-2 border-slate-600 rounded-2xl resize-none text-slate-200 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-slate-800/50 transition-all font-sans text-sm shadow-sm"
+        ></textarea>
       </div>
     </div>
 

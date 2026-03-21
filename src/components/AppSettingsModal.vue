@@ -50,25 +50,9 @@ const settingsGroups = [
         ]
       },
       {
-        id: 'ignoreExts',
-        type: 'textarea',
-        label: '忽略后缀或目录',
-        description: '可通过英文逗号或换行分隔，支持使用 * 通配符匹配（如 *.log, test-* 等）。',
-        placeholder: '.git, node_modules, dist, target, build',
-        rows: 4
-      },
-      {
-        id: 'ignoreDeepParse',
-        type: 'textarea',
-        label: '不进行深层解析的忽略配置',
-        description: '可通过英文逗号或换行分隔，支持使用 *。匹配到的文件将作为终端上下文，但不继续解析依赖。',
-        placeholder: "package.json, tsconfig.json, vite.config.ts, README.md, *.test.ts",
-        rows: 3
-      },
-      {
         id: 'customPrompt',
         type: 'textarea',
-        label: '自定义提示词首部',
+        label: '自定义提示词',
         description: '可以在生成的上下文前面插入所需的引导信息。',
         placeholder: '请输入自定义提示词...',
         rows: 3
@@ -91,6 +75,22 @@ const settingsGroups = [
         type: 'switch',
         label: '选择文件后立即解析',
         description: '如果关闭，在拖拽或选择路径后需要手动点击“生成”按钮。'
+      },
+      {
+        id: 'ignoreExts',
+        type: 'textarea',
+        label: '忽略后缀或目录',
+        description: '可通过英文逗号或换行分隔，支持使用 * 通配符匹配（如 *.log, test-* 等）。',
+        placeholder: '.git, node_modules, dist, target, build',
+        rows: 4
+      },
+      {
+        id: 'ignoreDeepParse',
+        type: 'textarea',
+        label: '不进行深层解析的忽略配置',
+        description: '可通过英文逗号或换行分隔，支持使用 *。匹配到的文件将作为终端上下文，但不继续解析依赖。',
+        placeholder: "package.json, tsconfig.json, vite.config.ts, README.md, *.test.ts",
+        rows: 3
       },
     ]
   }
