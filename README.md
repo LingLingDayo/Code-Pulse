@@ -1,165 +1,73 @@
-# CodePulse
+# CodePulse (码脉) 🚀
 
-CodePulse is a cross-platform desktop application for AI-powered code generation and analysis, built with Tauri, Vue 3, and TypeScript.
+CodePulse 是一款专为大语言模型 (LLM) 设计的高效代码上下文生成工具。通过深度递归分析文件依赖，它能将分散的代码逻辑自动化地汇聚成一份结构化的文本块，是开发者向 AI 发送代码 Prompt 的最佳拍档。
 
-## Features
+---
 
-- **AI Code Generation**: Generate code snippets, functions, and components using AI
-- **Code Analysis**: Analyze code for potential issues and improvements
-- **Cross-Platform**: Runs on Windows, macOS, and Linux
-- **Modern UI**: Clean and intuitive user interface with Vue 3
-- **Desktop Integration**: Native desktop application with Tauri
+## ✨ 核心特性
 
-## Tech Stack
+- **🔍 深度依赖追踪**: 自动解析 `import` / `require` / `use` 等语句，递归获取所有相关源代码（支持自定义深度）。
+- **📦 多语言支持**: 完美支持 TypeScript (Vite/Vue), JavaScript, Python 和 Rust。
+- **🛡️ 智能过滤**: 自动忽略 `node_modules`, `.git`, `dist`, `target` 等无关目录。
+- **📋 一键就绪**: 合并后的上下文带清晰的文件路径标识，一键点击即可复制到剪贴板。
+- **⚡ 现代体验**: 基于 Tauri + Vue 3 构建的高性能、极小体积的桌面应用。
 
-- **Frontend**: Vue 3 + TypeScript + Vite
-- **Desktop Framework**: Tauri
-- **Styling**: Tailwind CSS
-- **Icons**: Lucide React
-- **State Management**: Pinia
-- **AI Integration**: OpenAI API (configurable)
+---
 
-## Prerequisites
+## 🛠️ 技术栈
 
-- Node.js (v18 or higher)
-- Rust (v1.65 or higher)
-- Cargo (Rust package manager)
+- **Frontend**: [Vue 3](https://vuejs.org/) + [TypeScript](https://www.typescriptlang.org/)
+- **Styling**: [Tailwind CSS 4.x](https://tailwindcss.com/)
+- **Desktop Engine**: [Tauri 2.x](https://tauri.app/)
+- **Logic Core**: Rust (High performance dependency analysis)
 
-## Installation
+---
 
-1. Clone the repository:
+## 🏗️ 快速开始
+
+### 运行开发环境
+
+确保你已经安装了 [Rust](https://www.rust-lang.org/) 环境。
+
+1. **克隆项目**:
    ```bash
-   git clone <repository-url>
+   git clone <repo-url>
    cd CodePulse
    ```
 
-2. Install frontend dependencies:
+2. **安装依赖**:
    ```bash
-   cd src-tauri
    npm install
    ```
 
-3. Install backend dependencies:
+3. **启动开发服务器**:
    ```bash
-   cd ..
-   npm install
+   npm run tauri dev
    ```
 
-4. Configure AI API Key:
-   Create a `.env` file in the `src-tauri` directory with your OpenAI API key:
-   ```env
-   OPENAI_API_KEY=your_openai_api_key_here
-   ```
-
-## Development
-
-### Start Development Server
-
-```bash
-npm run dev
-```
-
-This will start both the frontend development server and the Tauri backend. You can access the application at `http://localhost:5173`.
-
-### Run Tauri Commands
-
-```bash
-# Run in development mode
-npm run tauri dev
-
-# Build for production
-npm run tauri build
-
-# Run specific Tauri commands
-npm run tauri dev -- --target x86_64-pc-windows-msvc
-```
-
-## Project Structure
-
-```
-CodePulse/
-├── src-tauri/          # Tauri backend and Rust code
-│   ├── src/             # Rust source code
-│   ├── Cargo.toml       # Rust dependencies
-│   └── ...
-├── src/                 # Vue frontend
-│   ├── components/      # Vue components
-│   ├── stores/          # Pinia stores
-│   ├── views/           # Page components
-│   ├── App.vue          # Root component
-│   ├── main.ts          # Entry point
-│   └── ...
-├── public/              # Static assets
-├── .env                 # Environment variables (in src-tauri/)
-├── package.json         # Frontend dependencies
-└── README.md            # Project documentation
-```
-
-## Configuration
-
-### AI Settings
-
-You can configure AI settings in the frontend:
-
-1. Open `src/stores/aiSettings.ts`
-2. Update the `model` and `temperature` values as needed
-3. The API key is loaded from the environment variable `OPENAI_API_KEY`
-
-### Tauri Settings
-
-For Tauri-specific configuration, edit `src-tauri/tauri.conf.json`:
-
-```json
-{
-  "package": {
-    "productName": "CodePulse",
-    "version": "1.0.0"
-  },
-  "tauri": {
-    "bundle": {
-      "targets": null,
-      "windows": {
-        "webviewInstallMode": {
-          "type": "downloadBootstrapper"
-        }
-      }
-    }
-  }
-}
-```
-
-## Development Commands
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start frontend dev server + Tauri backend |
-| `npm run tauri dev` | Start Tauri backend only |
-| `npm run tauri build` | Build for production |
-| `npm run tauri build -- --target x86_64-pc-windows-msvc` | Build for specific target |
-| `npm run tauri dev -- --target x86_64-pc-windows-msvc` | Run on specific target |
-
-## Building for Production
-
-To create a production build:
+### 构建应用
 
 ```bash
 npm run tauri build
 ```
 
-This will create executables for your platform in the `src-tauri/target/release/` directory.
+---
 
-## License
+## 📖 使用指南
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+1. **选择深度**: 在界面上方设置递归搜索的最大深度（推荐 1-3）。
+2. **拖放位置**: 将你的代码文件或整个项目文件夹拖入蓝色的虚线区域。
+3. **获取上下文**: 解析完成后，合并的代码将呈现在下方的输出框中。
+4. **一键复制**: 点击右侧的“一键复制”按钮，直接粘贴到 ChatGPT / Claude / DeepSeek 等 AI 窗口。
 
-## Contributing
+---
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## 🤝 贡献与反馈
 
-## Support
+如果你有任何建议、发现 Bug 或想贡献代码，欢迎提交 Issue 或 Pull Request！
 
-For issues or questions, please open an issue on the repository.
+---
 
-## Recommended IDE Setup
+## 📄 开源协议
 
-- [VS Code](https://code.visualstudio.com/) + [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+MIT License
