@@ -12,6 +12,19 @@ static JS_RE: OnceLock<Regex> = OnceLock::new();
 static PY_RE: OnceLock<Regex> = OnceLock::new();
 // rust: use ...; | mod ...;
 static RS_RE: OnceLock<Regex> = OnceLock::new();
+// go: import "..." | import ( ... )
+static GO_RE: OnceLock<Regex> = OnceLock::new();
+// java/kotlin: import ...;
+static JAVA_RE: OnceLock<Regex> = OnceLock::new();
+// c/cpp: #include "..."
+static CPP_RE: OnceLock<Regex> = OnceLock::new();
+// csharp: using ...;
+static CS_RE: OnceLock<Regex> = OnceLock::new();
+// php: require '...'; | include '...'; | use ...;
+static PHP_RE: OnceLock<Regex> = OnceLock::new();
+// ruby: require '...' | require_relative '...'
+static RB_RE: OnceLock<Regex> = OnceLock::new();
+static STR_RE: OnceLock<Regex> = OnceLock::new();
 
 fn get_js_re() -> &'static Regex {
     JS_RE.get_or_init(|| {
@@ -21,22 +34,65 @@ fn get_js_re() -> &'static Regex {
 
 fn get_py_re() -> &'static Regex {
     PY_RE.get_or_init(|| {
-        Regex::new(r#"^\s*(?:import|from)\s+([a-zA-Z0-9_\.]+)"#).unwrap()
+        Regex::new(r#"(?m)^\s*(?:import|from)\s+([a-zA-Z0-9_\.]+)"#).unwrap()
     })
 }
 
 fn get_rs_re() -> &'static Regex {
     RS_RE.get_or_init(|| {
-        Regex::new(r#"^\s*(?:use|mod)\s+([a-zA-Z0-9_:]+)"#).unwrap()
+        Regex::new(r#"(?m)^\s*(?:use|mod)\s+([a-zA-Z0-9_:]+)"#).unwrap()
+    })
+}
+
+fn get_go_re() -> &'static Regex {
+    GO_RE.get_or_init(|| {
+        Regex::new(r#"(?m)^\s*import\s+(?:\(\s*([\s\S]*?)\s*\)|['"]([^'"]+)['"])"#).unwrap()
+    })
+}
+
+fn get_str_re() -> &'static Regex {
+    STR_RE.get_or_init(|| {
+        Regex::new(r#"['"]([^'"]+)['"]"#).unwrap()
+    })
+}
+
+fn get_java_re() -> &'static Regex {
+    JAVA_RE.get_or_init(|| {
+        Regex::new(r#"(?m)^\s*import\s+([a-zA-Z0-9_\.]+);?"#).unwrap()
+    })
+}
+
+fn get_cpp_re() -> &'static Regex {
+    CPP_RE.get_or_init(|| {
+        Regex::new(r#"(?m)^\s*#include\s+["<]([^">]+)[">]"#).unwrap()
+    })
+}
+
+fn get_cs_re() -> &'static Regex {
+    CS_RE.get_or_init(|| {
+        Regex::new(r#"(?m)^\s*using\s+(?:static\s+)?([a-zA-Z0-9_\.]+);"#).unwrap()
+    })
+}
+
+fn get_php_re() -> &'static Regex {
+    PHP_RE.get_or_init(|| {
+        Regex::new(r#"(?m)^\s*(?:(?:require|include)(?:_once)?\s*['"]([^'"]+)['"]|use\s+([a-zA-Z0-9_\\]+);)"#).unwrap()
+    })
+}
+
+fn get_rb_re() -> &'static Regex {
+    RB_RE.get_or_init(|| {
+        Regex::new(r#"(?m)^\s*require(?:_relative)?\s*['"]([^'"]+)['"]"#).unwrap()
     })
 }
 
 fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
     let mut deps = Vec::new();
+    let content_lf = content.replace("\r\n", "\n");
     match ext {
         "js" | "jsx" | "ts" | "tsx" | "vue" | "svelte" => {
             let re = get_js_re();
-            for cap in re.captures_iter(content) {
+            for cap in re.captures_iter(&content_lf) {
                 if let Some(m) = cap.get(1).or(cap.get(2)).or(cap.get(3)) {
                     deps.push(m.as_str().to_string());
                 }
@@ -44,7 +100,7 @@ fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
         }
         "py" => {
             let re = get_py_re();
-            for cap in re.captures_iter(&content.replace("\r\n", "\n")) {
+            for cap in re.captures_iter(&content_lf) {
                 if let Some(m) = cap.get(1) {
                     deps.push(m.as_str().replace('.', "/"));
                 }
@@ -52,9 +108,62 @@ fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
         }
         "rs" => {
             let re = get_rs_re();
-            for cap in re.captures_iter(&content.replace("\r\n", "\n")) {
+            for cap in re.captures_iter(&content_lf) {
                 if let Some(m) = cap.get(1) {
                     deps.push(m.as_str().replace("::", "/"));
+                }
+            }
+        }
+        "go" => {
+            let re = get_go_re();
+            let str_re = get_str_re();
+            for cap in re.captures_iter(&content_lf) {
+                if let Some(block) = cap.get(1) {
+                    for scap in str_re.captures_iter(block.as_str()) {
+                        deps.push(scap.get(1).unwrap().as_str().to_string());
+                    }
+                } else if let Some(m) = cap.get(2) {
+                    deps.push(m.as_str().to_string());
+                }
+            }
+        }
+        "java" | "kt" => {
+            let re = get_java_re();
+            for cap in re.captures_iter(&content_lf) {
+                if let Some(m) = cap.get(1) {
+                    deps.push(m.as_str().replace('.', "/"));
+                }
+            }
+        }
+        "c" | "cpp" | "h" | "hpp" => {
+            let re = get_cpp_re();
+            for cap in re.captures_iter(&content_lf) {
+                if let Some(m) = cap.get(1) {
+                    deps.push(m.as_str().to_string());
+                }
+            }
+        }
+        "cs" => {
+            let re = get_cs_re();
+            for cap in re.captures_iter(&content_lf) {
+                if let Some(m) = cap.get(1) {
+                    deps.push(m.as_str().replace('.', "/"));
+                }
+            }
+        }
+        "php" => {
+            let re = get_php_re();
+            for cap in re.captures_iter(&content_lf) {
+                if let Some(m) = cap.get(1).or(cap.get(2)) {
+                    deps.push(m.as_str().replace('\\', "/"));
+                }
+            }
+        }
+        "rb" => {
+            let re = get_rb_re();
+            for cap in re.captures_iter(&content_lf) {
+                if let Some(m) = cap.get(1) {
+                    deps.push(m.as_str().to_string());
                 }
             }
         }
@@ -74,9 +183,15 @@ fn resolve_path(base_dir: &Path, import_path: &str, ext: &str) -> Option<PathBuf
     }
     
     let extensions = match ext {
-        "js" | "jsx" | "ts" | "tsx" | "vue" => vec!["ts", "js", "tsx", "jsx", "vue"],
+        "js" | "jsx" | "ts" | "tsx" | "vue" | "svelte" => vec!["ts", "js", "tsx", "jsx", "vue", "svelte"],
         "py" => vec!["py"],
         "rs" => vec!["rs"],
+        "go" => vec!["go"],
+        "java" | "kt" => vec!["java", "kt"],
+        "c" | "cpp" | "h" | "hpp" => vec!["cpp", "c", "h", "hpp"],
+        "cs" => vec!["cs"],
+        "php" => vec!["php"],
+        "rb" => vec!["rb"],
         _ => vec![],
     };
 
@@ -173,7 +288,8 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree:
     let mut parsed_paths: Vec<String> = Vec::new();
 
     let included_types_set: HashSet<String> = if included_types.is_empty() {
-        vec!["js", "jsx", "ts", "tsx", "vue", "svelte", "py", "rs"].into_iter().map(|s| s.to_string()).collect()
+        vec!["js", "jsx", "ts", "tsx", "vue", "svelte", "py", "rs", "go", "java", "kt", "c", "cpp", "h", "hpp", "cs", "php", "rb"]
+            .into_iter().map(|s| s.to_string()).collect()
     } else {
         included_types.into_iter().map(|s| s.to_lowercase()).collect()
     };
@@ -181,6 +297,7 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree:
     let ignores_defaults: Vec<String> = vec![
         "node_modules", ".git", "dist", "target", "build", ".vscode", ".idea", 
         ".next", ".nuxt", ".output", ".vercel", ".github", 
+        "__pycache__", ".venv", ".pytest_cache", ".gradle", ".m2", "bin", "obj",
         "*.lock", "*-lock.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
         ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".webp",
         ".mp4", ".avi", ".mkv", ".mov", ".webm",

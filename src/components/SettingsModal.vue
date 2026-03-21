@@ -83,7 +83,7 @@ function close() {
       <div class="px-5 py-3 bg-slate-900/50 border-t border-slate-700 flex justify-end shrink-0">
         <button 
           @click="close" 
-          class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-md shadow-md transition-colors"
+          class="px-7 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-md shadow-md transition-colors"
         >
           保存
         </button>
