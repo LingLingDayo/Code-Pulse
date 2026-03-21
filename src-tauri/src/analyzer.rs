@@ -386,8 +386,19 @@ fn resolve_path(base_dir: &Path, import_path: &str, ext: &str, project_root: &Pa
     }
 }
 
-fn find_project_root(start_path: &Path) -> PathBuf {
-    // 增加对多种编程语言和构建工具根目录标识文件的支持，确保在不同类型的项目中都能准确识别根节点
+fn find_project_root(start_path: &Path, manual_roots: &[PathBuf]) -> PathBuf {
+    // 1. 如果用户手动指定了根目录，检查当前路径是否在其中之一的子树下
+    for mr in manual_roots {
+        if let (Ok(abs_start), Ok(abs_mr)) = (start_path.canonicalize(), mr.canonicalize()) {
+            if abs_start.starts_with(&abs_mr) {
+                return abs_mr;
+            }
+        } else if start_path.starts_with(mr) {
+            return mr.to_path_buf();
+        }
+    }
+
+    // 2. 增加对多种编程语言和构建工具根目录标识文件的支持，确保在不同类型的项目中都能准确识别根节点
     let root_markers = [
         "package.json", "Cargo.toml", ".git", "go.mod", "go.work",
         "pyproject.toml", "requirements.txt", "pom.xml", 
@@ -470,10 +481,17 @@ pub struct FileNode {
     pub abs_path: String,
 }
 
-pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String, ignore_deep_parse: String, included_types: Vec<String>) -> Result<Vec<FileNode>, String> {
+pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String, ignore_deep_parse: String, included_types: Vec<String>, project_roots: String) -> Result<Vec<FileNode>, String> {
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut result_blocks: Vec<FileNode> = Vec::new();
     let mut parsed_paths: Vec<String> = Vec::new();
+
+    let manual_roots: Vec<PathBuf> = project_roots
+        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .collect();
 
     let included_types_set: HashSet<String> = if included_types.is_empty() {
         vec!["js", "mjs", "jsx", "ts", "tsx", "vue", "svelte", "py", "rs", "go", "java", "kt", "c", "cpp", "h", "hpp", "cs", "php", "rb", "css", "scss", "less"]
@@ -505,7 +523,7 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree:
         let path = Path::new(&p_str);
         if !path.exists() { continue; }
 
-        let base_path = find_project_root(path);
+        let base_path = find_project_root(path, &manual_roots);
 
         if path.is_dir() {
             for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {

@@ -30,6 +30,7 @@ const appConfig = reactive({
   generateTree: true,
   autoGenerate: true,
   customIncludedTypes: "",
+  projectRoots: "",
 });
 let unlistenDragDrop: () => void;
 let lastHighlightedNode: HTMLElement | null = null;
@@ -114,6 +115,7 @@ async function processPaths(paths: string[]) {
       ignoreExts: appConfig.ignoreExts,
       ignoreDeepParse: appConfig.ignoreDeepParse,
       includedTypes: finalIncludedTypes,
+      projectRoots: appConfig.projectRoots,
     });
     
     fileNodes.value = result.map(node => {

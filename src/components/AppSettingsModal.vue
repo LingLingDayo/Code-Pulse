@@ -111,6 +111,14 @@ const settingsGroups = [
         placeholder: "package.json, tsconfig.json, vite.config.ts, README.md, *.test.ts",
         rows: 3
       },
+      {
+        id: 'projectRoots',
+        type: 'textarea',
+        label: '指定根目录',
+        description: '为空表示自动匹配。可以用逗号或换行分隔多个路径。若手动指定的根目录都不匹配，则回退到自动匹配逻辑。',
+        placeholder: "D:/Projects/my-app, D:/Projects/common-lib",
+        rows: 2
+      },
     ]
   }
 ];
