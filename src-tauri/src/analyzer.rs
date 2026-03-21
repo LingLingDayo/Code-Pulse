@@ -27,6 +27,10 @@ static RB_RE: OnceLock<Regex> = OnceLock::new();
 // css/scss/less: @import "..."; | @import url("...");
 static CSS_RE: OnceLock<Regex> = OnceLock::new();
 static STR_RE: OnceLock<Regex> = OnceLock::new();
+// html: <script src="..."> | <link href="...">
+static HTML_RE: OnceLock<Regex> = OnceLock::new();
+// md: [text](link)
+static MD_RE: OnceLock<Regex> = OnceLock::new();
 
 fn get_js_re() -> &'static Regex {
     JS_RE.get_or_init(|| {
@@ -91,6 +95,18 @@ fn get_rb_re() -> &'static Regex {
 fn get_css_re() -> &'static Regex {
     CSS_RE.get_or_init(|| {
         Regex::new(r#"(?m)@import\s+(?:url\(['"]?([^'"]+?)['"]?\)|['"]([^'"]+)['"])"#).unwrap()
+    })
+}
+
+fn get_html_re() -> &'static Regex {
+    HTML_RE.get_or_init(|| {
+        Regex::new(r#"(?i)<(?:script[^>]+src|link[^>]+href)\s*=\s*['"]([^'"]+)['"]"#).unwrap()
+    })
+}
+
+fn get_md_re() -> &'static Regex {
+    MD_RE.get_or_init(|| {
+        Regex::new(r#"\[[^\]]*\]\(([^)]+)\)"#).unwrap()
     })
 }
 
@@ -183,6 +199,29 @@ fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
                 }
             }
         }
+        "html" => {
+            let re = get_html_re();
+            for cap in re.captures_iter(&content_lf) {
+                if let Some(m) = cap.get(1) {
+                    deps.push(m.as_str().to_string());
+                }
+            }
+        }
+        "md" => {
+            let re = get_md_re();
+            for cap in re.captures_iter(&content_lf) {
+                if let Some(m) = cap.get(1) {
+                    let link = m.as_str().trim();
+                    if !link.is_empty() && !link.starts_with("http") && !link.starts_with('#') {
+                        let mut clean_link = link.to_string();
+                        if let Some(idx) = clean_link.find(|c| c == '?' || c == '#') {
+                            clean_link.truncate(idx);
+                        }
+                        deps.push(clean_link);
+                    }
+                }
+            }
+        }
         _ => {}
     }
     deps
@@ -209,6 +248,8 @@ fn resolve_path(base_dir: &Path, import_path: &str, ext: &str) -> Option<PathBuf
         "php" => vec!["php"],
         "rb" => vec!["rb"],
         "css" | "scss" | "less" => vec!["css", "scss", "less"],
+        "html" => vec!["js", "css", "html"],
+        "md" => vec!["md", "png", "jpg", "jpeg", "svg"],
         _ => vec![],
     };
 
