@@ -125,12 +125,27 @@ fn find_project_root(start_path: &Path) -> PathBuf {
     }
 }
 
-pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree: bool) -> Result<String, String> {
+pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String) -> Result<String, String> {
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut result_blocks: Vec<String> = Vec::new();
     let mut parsed_paths: Vec<String> = Vec::new();
 
     let supported_exts = vec!["js", "jsx", "ts", "tsx", "vue", "svelte", "py", "rs"];
+
+    let mut ignores: Vec<String> = vec![
+        "node_modules".to_string(), ".git".to_string(), "dist".to_string(), "target".to_string(),
+        ".jpg".to_string(), ".jpeg".to_string(), ".png".to_string(), ".gif".to_string(), ".svg".to_string(), ".ico".to_string(), ".webp".to_string(),
+        ".mp4".to_string(), ".avi".to_string(), ".mkv".to_string(), ".mov".to_string(), ".webm".to_string(),
+        ".mp3".to_string(), ".wav".to_string(), ".flac".to_string(), ".aac".to_string(), ".ogg".to_string(),
+    ];
+    if !ignore_exts.is_empty() {
+        for p in ignore_exts.split(',') {
+            let s = p.trim().to_string();
+            if !s.is_empty() {
+                ignores.push(s);
+            }
+        }
+    }
 
     for p_str in paths {
         let path = Path::new(&p_str);
@@ -145,15 +160,15 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree:
                     let ext = e_path.extension().and_then(|e| e.to_str()).unwrap_or("");
                     if supported_exts.contains(&ext) {
                         let path_str = e_path.to_string_lossy();
-                        if path_str.contains("node_modules") || path_str.contains(".git") || path_str.contains("dist") || path_str.contains("target") {
+                        if ignores.iter().any(|ig| path_str.contains(ig)) {
                             continue;
                         }
-                        process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path);
+                        process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, &ignores);
                     }
                 }
             }
         } else {
-            process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path);
+            process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, &ignores);
         }
     }
 
@@ -196,7 +211,8 @@ fn process_file(
     visited: &mut HashSet<PathBuf>, 
     result_blocks: &mut Vec<String>,
     parsed_paths: &mut Vec<String>,
-    base_path: &Path
+    base_path: &Path,
+    ignores: &[String]
 ) {
     if current_depth > max_depth || !path.exists() { return; }
     
@@ -204,7 +220,7 @@ fn process_file(
     if visited.contains(&abs_path) || abs_path.as_os_str().is_empty() { return; }
     
     let path_str = abs_path.to_string_lossy();
-    if path_str.contains("node_modules") || path_str.contains(".git") || path_str.contains("dist") || path_str.contains("target") {
+    if ignores.iter().any(|ig| path_str.contains(ig)) {
         return;
     }
     
@@ -234,7 +250,7 @@ fn process_file(
         
         for dep in extract_dependencies(&content, ext) {
             if let Some(resolved) = resolve_path(base_dir, &dep, ext) {
-                process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path);
+                process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path, ignores);
             }
         }
     }

@@ -13,7 +13,7 @@ const isSettingsOpen = ref(false);
 
 const appConfig = reactive({
   maxDepth: 3,
-  ignoreExts: ".git, node_modules, dist",
+  ignoreExts: ".git, node_modules, dist, target",
   ignoreDeepParse: "",
   customPrompt: "",
   generateTree: true,
@@ -55,6 +55,7 @@ async function processPaths(paths: string[]) {
       paths: paths,
       maxDepth: appConfig.maxDepth,
       generateTree: appConfig.generateTree,
+      ignoreExts: appConfig.ignoreExts,
     });
     outputContext.value = result;
   } catch (error) {

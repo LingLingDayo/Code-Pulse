@@ -38,7 +38,7 @@ const settingsGroups = [
         type: 'input',
         label: '忽略后缀或目录',
         description: '通过英文逗号分隔，匹配的目录或文件将不被解析。',
-        placeholder: '.git, node_modules, dist'
+        placeholder: '.git, node_modules, dist, target'
       },
       {
         id: 'ignoreDeepParse',
