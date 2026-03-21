@@ -380,7 +380,8 @@ async function triggerDirInput() {
     <!-- Settings Modal -->
     <AppSettingsModal 
       v-model:show="isSettingsOpen" 
-      v-model:settings="appConfig"
+      :settings="appConfig"
+      @update:settings="val => Object.assign(appConfig, val)"
     />
   </main>
 </template>

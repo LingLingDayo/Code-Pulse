@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import DynamicControl from "./DynamicControl.vue";
 
 const props = defineProps<{
@@ -13,11 +13,20 @@ const emit = defineEmits<{
   (e: "update:settings", value: Record<string, any>): void;
 }>();
 
+// 本地设置状态存储，仅在保存时同步回外层
+const localSettings = ref<Record<string, any>>({});
+
+// 当弹窗打开时，深拷贝外层设置到本地，确保不直接修改
+watch(() => props.show, (newVal) => {
+  if (newVal) {
+    localSettings.value = JSON.parse(JSON.stringify(props.settings));
+  }
+}, { immediate: true });
+
 // 默认全展开状态存储 (Map 风格记录 group.id -> boolean)
 const expandedGroups = ref<Record<string, boolean>>({});
 
 // 初始化展开状态 (仅在初次渲染或 groups 变化时处理)
-// 也可以直接在点击时判断 undefined 为 true
 function isExpanded(groupId: string) {
   return expandedGroups.value[groupId] !== false;
 }
@@ -29,10 +38,21 @@ function toggleGroup(groupId: string) {
 function close() {
   emit("update:show", false);
 }
+
+function handleSave() {
+  // 保存时提交修改
+  emit("update:settings", { ...localSettings.value });
+  close();
+}
+
+function handleCancel() {
+  // 取消时不保存直接关闭
+  close();
+}
 </script>
 
 <template>
-  <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+  <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" @click.self="handleCancel">
     <div class="bg-slate-800 border border-slate-700 rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col transform transition-all overflow-hidden">
       <!-- Header -->
       <div class="px-5 py-3 border-b border-slate-700 flex justify-between items-center bg-slate-800/50 shrink-0">
@@ -43,7 +63,7 @@ function close() {
           </svg>
           偏好设置 (Settings)
         </h3>
-        <button @click="close" class="text-slate-400 hover:text-slate-200 transition-colors p-1 rounded-md hover:bg-slate-700">
+        <button @click="handleCancel" class="text-slate-400 hover:text-slate-200 transition-colors p-1 rounded-md hover:bg-slate-700">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -72,7 +92,7 @@ function close() {
             
             <div v-show="isExpanded(group.id)" class="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
               <template v-for="item in group.items" :key="item.id">
-                <DynamicControl :config="item" v-model="settings[item.id]" />
+                <DynamicControl :config="item" v-model="localSettings[item.id]" />
               </template>
             </div>
           </div>
@@ -80,9 +100,15 @@ function close() {
       </div>
 
       <!-- Footer -->
-      <div class="px-5 py-3 bg-slate-900/50 border-t border-slate-700 flex justify-end shrink-0">
+      <div class="px-5 py-3 bg-slate-900/50 border-t border-slate-700 flex justify-end shrink-0 gap-3">
         <button 
-          @click="close" 
+          @click="handleCancel" 
+          class="px-5 py-2 bg-slate-700/80 hover:bg-slate-600 text-slate-200 font-semibold rounded-md transition-colors border border-slate-600"
+        >
+          取消
+        </button>
+        <button 
+          @click="handleSave" 
           class="px-7 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-md shadow-md transition-colors"
         >
           保存
