@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
+import SettingsModal from "./components/SettingsModal.vue";
 
 const maxDepth = ref(3);
 const generateTree = ref(true);
@@ -11,6 +12,7 @@ const isDragging = ref(false);
 const isLoading = ref(false);
 const filesList = ref<string[]>([]);
 const isSettingsOpen = ref(false);
+const autoGenerate = ref(true);
 
 let unlistenDragDrop: () => void;
 
@@ -25,7 +27,9 @@ onMounted(async () => {
       const paths = event.payload.paths;
       if (paths && paths.length > 0) {
         filesList.value = paths;
-        processPaths(paths);
+        if (autoGenerate.value) {
+          processPaths(paths);
+        }
       }
     }
   });
@@ -70,7 +74,9 @@ function handleDrop(event: DragEvent) {
     }
     if (paths.length > 0) {
       filesList.value = paths;
-      processPaths(paths);
+      if (autoGenerate.value) {
+        processPaths(paths);
+      }
     }
   }
 }
@@ -92,10 +98,10 @@ async function triggerFileInput() {
     });
     if (selected && Array.isArray(selected)) {
         filesList.value = selected;
-        processPaths(selected);
+        if (autoGenerate.value) processPaths(selected);
     } else if (selected && typeof selected === 'string') {
         filesList.value = [selected];
-        processPaths([selected]);
+        if (autoGenerate.value) processPaths([selected]);
     }
 }
 
@@ -106,10 +112,10 @@ async function triggerDirInput() {
     });
     if (selected && Array.isArray(selected)) {
         filesList.value = selected;
-        processPaths(selected);
+        if (autoGenerate.value) processPaths(selected);
     } else if (selected && typeof selected === 'string') {
         filesList.value = [selected];
-        processPaths([selected]);
+        if (autoGenerate.value) processPaths([selected]);
     }
 }
 </script>
@@ -220,64 +226,12 @@ async function triggerDirInput() {
     </div>
 
     <!-- Settings Modal -->
-    <div v-if="isSettingsOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all">
-        <div class="px-6 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
-          <h3 class="text-xl font-bold text-slate-100 flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            偏好设置 (Settings)
-          </h3>
-          <button @click="isSettingsOpen = false" class="text-slate-400 hover:text-slate-200 transition-colors p-1 rounded-md hover:bg-slate-700">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div class="p-6 space-y-6">
-          <div class="space-y-2">
-            <label for="modal-depth" class="block text-sm font-semibold text-slate-300">递归解析深度 (Recursive Parsing Depth)</label>
-            <p class="text-xs text-slate-500 pb-1">设置文件解析依赖扫描的层级数。设置得越高，包含的相关文件越多。</p>
-            <div class="flex items-center space-x-3">
-              <input 
-                id="modal-depth" 
-                type="range" 
-                v-model="maxDepth" 
-                min="0" 
-                max="10"
-                class="flex-1 w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-              />
-              <span class="text-lg font-mono font-bold text-blue-400 w-8 text-center">{{ maxDepth }}</span>
-            </div>
-          </div>
-          
-          <div class="space-y-4 pt-4 border-t border-slate-700/50">
-            <h4 class="text-sm font-semibold text-slate-300">更多设置 (More Settings)</h4>
-            
-            <label class="flex items-center justify-between cursor-pointer p-3 bg-slate-900/50 rounded-lg border border-slate-700/50 hover:bg-slate-900/70 transition-colors">
-              <div class="flex flex-col">
-                <span class="text-sm font-semibold text-slate-200">顶部生成文件树结构</span>
-                <span class="text-xs text-slate-500 mt-0.5">结果中最开头将包含解析目录的层级树状图。</span>
-              </div>
-              <div class="relative">
-                <input type="checkbox" v-model="generateTree" class="sr-only peer">
-                <div class="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-blue-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
-              </div>
-            </label>
-          </div>
-        </div>
-        <div class="px-6 py-4 bg-slate-900/50 border-t border-slate-700 flex justify-end">
-          <button 
-            @click="isSettingsOpen = false" 
-            class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-md transition-colors"
-          >
-            完成 (Done)
-          </button>
-        </div>
-      </div>
-    </div>
+    <SettingsModal 
+      v-model:show="isSettingsOpen" 
+      v-model:maxDepth="maxDepth" 
+      v-model:generateTree="generateTree" 
+      v-model:autoGenerate="autoGenerate"
+    />
   </main>
 </template>
 
