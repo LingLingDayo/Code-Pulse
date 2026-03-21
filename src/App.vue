@@ -18,7 +18,6 @@ const appConfig = reactive({
   customPrompt: "",
   generateTree: true,
   autoGenerate: true,
-  parseMode: "normal",
   includedTypes: ["vue", "ts", "js", "rs", "json", "md", "html", "css"],
 });
 
@@ -57,6 +56,7 @@ async function processPaths(paths: string[]) {
       generateTree: appConfig.generateTree,
       ignoreExts: appConfig.ignoreExts,
       ignoreDeepParse: appConfig.ignoreDeepParse,
+      includedTypes: appConfig.includedTypes,
     });
     outputContext.value = result;
   } catch (error) {

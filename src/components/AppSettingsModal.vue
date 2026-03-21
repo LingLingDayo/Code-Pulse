@@ -34,6 +34,22 @@ const settingsGroups = [
         max: 10
       },
       {
+        id: 'includedTypes',
+        type: 'checkbox',
+        label: '目标文件格式',
+        description: '选择你需要包含和提取的目标代码文件格式。',
+        options: [
+          { label: '.vue', value: 'vue' },
+          { label: '.ts', value: 'ts' },
+          { label: '.js', value: 'js' },
+          { label: '.rs', value: 'rs' },
+          { label: '.json', value: 'json' },
+          { label: '.md', value: 'md' },
+          { label: '.html', value: 'html' },
+          { label: '.css', value: 'css' }
+        ]
+      },
+      {
         id: 'ignoreExts',
         type: 'textarea',
         label: '忽略后缀或目录',
@@ -45,7 +61,7 @@ const settingsGroups = [
         id: 'ignoreDeepParse',
         type: 'textarea',
         label: '不进行深层解析的忽略配置',
-        description: '可通过英文逗号或换行分隔，支持使用 *。匹配到的文件将作为终端上下文，但不继续向下深挖。',
+        description: '可通过英文逗号或换行分隔，支持使用 *。匹配到的文件将作为终端上下文，但不继续解析依赖。',
         placeholder: "package.json, tsconfig.json, vite.config.ts, README.md, *.test.ts",
         rows: 3
       },
@@ -76,32 +92,6 @@ const settingsGroups = [
         label: '选择文件后立即解析',
         description: '如果关闭，在拖拽或选择路径后需要手动点击“生成”按钮。'
       },
-      {
-        id: 'parseMode',
-        type: 'radio',
-        label: '默认解析模式',
-        options: [
-          { label: '普通模式', value: 'normal' },
-          { label: '严格模式', value: 'strict' },
-          { label: '智能过滤', value: 'smart' }
-        ]
-      },
-      {
-        id: 'includedTypes',
-        type: 'checkbox',
-        label: '目标文件格式',
-        description: '选择你需要包含和提取的目标代码文件格式。',
-        options: [
-          { label: '.vue', value: 'vue' },
-          { label: '.ts', value: 'ts' },
-          { label: '.js', value: 'js' },
-          { label: '.rs', value: 'rs' },
-          { label: '.json', value: 'json' },
-          { label: '.md', value: 'md' },
-          { label: '.html', value: 'html' },
-          { label: '.css', value: 'css' }
-        ]
-      }
     ]
   }
 ];

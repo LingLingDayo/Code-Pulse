@@ -160,12 +160,16 @@ fn parse_ignore_patterns(raw: &str, defaults: Vec<String>) -> (HashSet<String>, 
     (names, exts, fnames, regexes)
 }
 
-pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String, ignore_deep_parse: String) -> Result<String, String> {
+pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree: bool, ignore_exts: String, ignore_deep_parse: String, included_types: Vec<String>) -> Result<String, String> {
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut result_blocks: Vec<String> = Vec::new();
     let mut parsed_paths: Vec<String> = Vec::new();
 
-    let supported_exts = vec!["js", "jsx", "ts", "tsx", "vue", "svelte", "py", "rs"];
+    let included_types_set: HashSet<String> = if included_types.is_empty() {
+        vec!["js", "jsx", "ts", "tsx", "vue", "svelte", "py", "rs"].into_iter().map(|s| s.to_string()).collect()
+    } else {
+        included_types.into_iter().map(|s| s.to_lowercase()).collect()
+    };
 
     let ignores_defaults: Vec<String> = vec![
         "node_modules", ".git", "dist", "target", "build", ".vscode", ".idea", 
@@ -195,21 +199,23 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, generate_tree:
             for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
                 let e_path = entry.path();
                 if e_path.is_file() {
-                    let ext = e_path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                    if supported_exts.contains(&ext) {
+                    let ext = e_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                    if included_types_set.contains(&ext) {
                         if should_ignore(e_path, &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes) {
                             continue;
                         }
                         process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, 
                             &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes,
-                            &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes);
+                            &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes,
+                            &included_types_set);
                     }
                 }
             }
         } else {
             process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, 
                 &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes,
-                &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes);
+                &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes,
+                &included_types_set);
         }
     }
 
@@ -306,12 +312,18 @@ fn process_file(
     ignore_deep_names: &HashSet<String>,
     ignore_deep_extensions: &HashSet<String>,
     ignore_deep_filenames: &HashSet<String>,
-    ignore_deep_regexes: &[Regex]
+    ignore_deep_regexes: &[Regex],
+    included_types: &HashSet<String>
 ) {
     if current_depth > max_depth || !path.exists() { return; }
     
     let abs_path = match path.canonicalize() { Ok(p) => p, Err(_) => return };
     if visited.contains(&abs_path) || abs_path.as_os_str().is_empty() { return; }
+
+    let file_ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if !included_types.is_empty() && !included_types.contains(&file_ext) {
+        return;
+    }
     
     if should_ignore(&abs_path, ignore_names, ignore_extensions, ignore_filenames, ignore_regexes) {
         return;
@@ -346,7 +358,8 @@ fn process_file(
                 if let Some(resolved) = resolve_path(base_dir, &dep, ext) {
                     process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path, 
                         ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
-                        ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes);
+                        ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,
+                        included_types);
                 }
             }
         }
