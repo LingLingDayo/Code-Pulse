@@ -18,8 +18,8 @@ const value = computed({
   <!-- Slider -->
   <div v-if="config.type === 'slider'" :class="['w-full', config.label ? 'space-y-2' : '']">
     <div class="flex items-center justify-between">
-        <label v-if="config.label" :for="config.id" class="block text-[11px] font-black uppercase tracking-widest text-app-text-dim">{{ config.label }}</label>
-        <span class="text-xs font-black font-mono text-app-primary bg-app-primary-light px-2 py-0.5 rounded-lg border border-app-primary/10 tracking-widest">{{ value }}</span>
+        <label v-if="config.label" :for="config.id" class="block text-[11px] font-black tracking-widest text-app-text-dim">{{ config.label }}</label>
+        <span class="text-xs text-center font-black font-mono text-app-primary bg-app-primary-light px-4 py-0.5 rounded-lg border border-app-primary/10 tracking-widest">{{ value }}</span>
     </div>
     <p v-if="config.description" class="text-[11px] text-app-text-mute pb-1 leading-relaxed italic opacity-80">{{ config.description }}</p>
     <div class="flex items-center space-x-4">
@@ -36,7 +36,7 @@ const value = computed({
 
   <!-- Input -->
   <div v-else-if="config.type === 'input'" :class="['w-full', config.label ? 'space-y-2' : '']">
-    <label v-if="config.label" :for="config.id" class="block text-[11px] font-black uppercase tracking-widest text-app-text-dim">{{ config.label }}</label>
+    <label v-if="config.label" :for="config.id" class="block text-[11px] font-black tracking-widest text-app-text-dim">{{ config.label }}</label>
     <p v-if="config.description" class="text-[11px] text-app-text-mute pb-1 leading-relaxed italic opacity-80">{{ config.description }}</p>
     <div class="relative group">
         <input 
@@ -54,7 +54,7 @@ const value = computed({
 
   <!-- Textarea -->
   <div v-else-if="config.type === 'textarea'" :class="['w-full', config.label ? 'space-y-2' : '']">
-    <label v-if="config.label" :for="config.id" class="block text-[11px] font-black uppercase tracking-widest text-app-text-dim">{{ config.label }}</label>
+    <label v-if="config.label" :for="config.id" class="block text-[11px] font-black tracking-widest text-app-text-dim">{{ config.label }}</label>
     <p v-if="config.description" class="text-[11px] text-app-text-mute pb-1 leading-relaxed italic opacity-80">{{ config.description }}</p>
     <textarea 
       :id="config.id"
@@ -68,7 +68,7 @@ const value = computed({
   <!-- Switch -->
   <label v-else-if="config.type === 'switch'" class="flex items-center justify-between cursor-pointer group py-3 px-4 bg-app-bg rounded-2xl border border-app-border/40 hover:border-app-primary/30 transition-all duration-500">
     <div class="flex flex-col pr-6">
-      <span v-if="config.label" class="text-[11px] font-black uppercase tracking-widest text-app-text-dim group-hover:text-app-text transition-colors">{{ config.label }}</span>
+      <span v-if="config.label" class="text-[11px] font-black tracking-widest text-app-text-dim group-hover:text-app-text transition-colors">{{ config.label }}</span>
       <span v-if="config.description" class="text-[11px] text-app-text-mute italic mt-1 leading-relaxed opacity-80">{{ config.description }}</span>
     </div>
     <div class="relative shrink-0">
@@ -79,21 +79,21 @@ const value = computed({
 
   <!-- Radio -->
   <div v-else-if="config.type === 'radio'" :class="[config.label ? 'space-y-2' : '']">
-    <label v-if="config.label" class="block text-[11px] font-black uppercase tracking-widest text-app-text-dim">{{ config.label }}</label>
+    <label v-if="config.label" class="block text-[11px] font-black tracking-widest text-app-text-dim">{{ config.label }}</label>
     <p v-if="config.description" class="text-[11px] text-app-text-mute pb-1 leading-relaxed italic opacity-80">{{ config.description }}</p>
     <div class="flex flex-wrap gap-4">
       <label v-for="opt in config.options" :key="opt.value" class="flex items-center space-x-2.5 cursor-pointer group">
         <div class="relative w-4.5 h-4.5 flex items-center justify-center">
             <input type="radio" :value="opt.value" v-model="value" class="w-full h-full accent-app-primary bg-app-surface border-app-border transition-all">
         </div>
-        <span class="text-xs font-black uppercase tracking-widest text-app-text-mute group-hover:text-app-text transition-colors">{{ opt.label }}</span>
+        <span class="text-xs font-black tracking-widest text-app-text-mute group-hover:text-app-text transition-colors">{{ opt.label }}</span>
       </label>
     </div>
   </div>
 
   <!-- Checkbox -->
   <div v-else-if="config.type === 'checkbox'" :class="[config.label ? 'space-y-3' : '']">
-    <label v-if="config.label" class="block text-[11px] font-black uppercase tracking-widest text-app-text-dim">{{ config.label }}</label>
+    <label v-if="config.label" class="block text-[11px] font-black tracking-widest text-app-text-dim">{{ config.label }}</label>
     <p v-if="config.description" class="text-[11px] text-app-text-mute pb-1 leading-relaxed italic opacity-80">{{ config.description }}</p>
     
     <!-- Grid Layout Mode -->
@@ -111,7 +111,7 @@ const value = computed({
         :title="opt.label"
       >
         <input type="checkbox" :value="opt.value" v-model="value" class="w-3.5 h-3.5 accent-app-primary bg-app-surface border-app-border rounded">
-        <span class="text-[10px] uppercase font-black tracking-widest text-app-text-mute group-hover:text-app-text truncate transition-colors">{{ opt.label }}</span>
+        <span class="text-[10px] font-black tracking-widest text-app-text-mute group-hover:text-app-text truncate transition-colors">{{ opt.label }}</span>
       </label>
     </div>
 
@@ -119,7 +119,7 @@ const value = computed({
     <div v-else class="flex flex-wrap gap-6">
       <label v-for="opt in config.options" :key="opt.value" class="flex items-center space-x-2.5 cursor-pointer group">
         <input type="checkbox" :value="opt.value" v-model="value" class="w-4 h-4 accent-app-primary bg-app-surface border-app-border rounded transition-all">
-        <span class="text-[11px] font-black uppercase tracking-widest text-app-text-mute group-hover:text-app-text transition-colors">{{ opt.label }}</span>
+        <span class="text-[11px] font-black tracking-widest text-app-text-mute group-hover:text-app-text transition-colors">{{ opt.label }}</span>
       </label>
     </div>
   </div>

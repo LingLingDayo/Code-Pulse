@@ -8,7 +8,7 @@ const props = defineProps<{
   groups: any[];
 }>();
 
-const emit = defineEmits(['update:show', 'save', 'cancel']);
+const emit = defineEmits(['update:show', 'update:settings', 'save', 'cancel']);
 
 const localSettings = reactive({ ...props.settings });
 const expandedGroups = ref<string[]>([props.groups[0]?.id]);
@@ -23,6 +23,7 @@ watch(() => props.show, (newVal) => {
 });
 
 const handleSave = () => {
+    emit('update:settings', { ...localSettings });
     emit('save', { ...localSettings });
     emit('update:show', false);
 };
@@ -48,12 +49,11 @@ const isExpanded = (groupId: string) => expandedGroups.value.includes(groupId);
   <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-app-text/20 backdrop-blur-md transition-all animate-in fade-in duration-300" @click.self="handleCancel">
     <div class="bg-app-surface border border-app-border rounded-[32px] shadow-app-xl w-full max-w-2xl max-h-[85vh] flex flex-col transform transition-all overflow-hidden animate-in zoom-in-95 duration-500">
       <!-- Header Area -->
-      <div class="px-8 py-6 border-b border-app-border flex justify-between items-center bg-app-surface shrink-0">
+      <div class="px-6 py-3 border-b border-app-border flex justify-between items-center bg-app-surface shrink-0">
         <div class="flex flex-col">
             <h3 class="text-xl font-black text-app-text tracking-tight flex items-center">
               设置 <span class="ml-2 font-medium opacity-20 text-sm">SETTINGS</span>
             </h3>
-            <span class="text-[10px] text-app-text-mute font-bold uppercase tracking-widest mt-1">定制您的解析工作流</span>
         </div>
         <button @click="handleCancel" class="text-app-text-mute hover:text-app-text transition-all p-2 rounded-2xl hover:bg-app-bg cursor-pointer group">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 group-hover:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -63,11 +63,11 @@ const isExpanded = (groupId: string) => expandedGroups.value.includes(groupId);
       </div>
 
       <!-- Settings Content -->
-      <div class="p-8 overflow-y-auto space-y-10 flex-1 custom-scrollbar">
+      <div class="p-6 overflow-y-auto space-y-10 flex-1 custom-scrollbar">
         <template v-for="group in groups" :key="group.id">
-          <div class="space-y-4 pt-2">
+          <div class="space-y-2 mb-1">
             <h4 
-              class="text-[11px] font-black uppercase tracking-[0.25em] flex items-center justify-between cursor-pointer select-none transition-all hover:opacity-70" 
+              class="text-[13px] font-black uppercase tracking-[0.25em] flex items-center justify-between py-2 mb-2 cursor-pointer select-none transition-all hover:opacity-70" 
               :style="{ color: group.color || 'var(--color-app-primary)' }"
               @click="toggleGroup(group.id)"
             >
@@ -95,16 +95,16 @@ const isExpanded = (groupId: string) => expandedGroups.value.includes(groupId);
       </div>
 
       <!-- Action Footer -->
-      <div class="px-8 py-5 border-t border-app-border flex justify-end shrink-0 gap-3">
+      <div class="px-8 py-4 border-t border-app-border flex justify-end shrink-0 gap-3">
         <button 
           @click="handleCancel" 
-          class="px-6 py-2 text-app-text-dim hover:text-app-text font-black text-xs uppercase tracking-widest rounded-xl transition-all border border-app-border hover:bg-app-bg cursor-pointer shadow-sm active:scale-95"
+          class="px-8 py-2.5 text-app-text-dim hover:text-app-text font-black text-xs uppercase tracking-widest rounded-xl transition-all border border-app-border hover:bg-app-bg cursor-pointer shadow-sm active:scale-95"
         >
           取消
         </button>
         <button 
           @click="handleSave" 
-          class="px-8 py-2 bg-app-text text-app-bg hover:bg-app-primary hover:text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer"
+          class="px-10 py-2.5 bg-app-text text-app-bg hover:bg-app-primary hover:text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer"
         >
           保存更改
         </button>

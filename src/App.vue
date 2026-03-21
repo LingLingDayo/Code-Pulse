@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive, computed, nextTick } from "vue";
+import { ref, onMounted, onUnmounted, reactive, computed, nextTick, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -33,10 +33,26 @@ const appConfig = reactive({
   projectRoots: "",
   enableMinimization: true,
 });
+
+watch(appConfig, (newVal) => {
+  localStorage.setItem("appConfig", JSON.stringify(newVal));
+}, { deep: true });
+
 let unlistenDragDrop: () => void;
 let lastHighlightedNode: HTMLElement | null = null;
 
 onMounted(async () => {
+  // Load saved config
+  const savedConfig = localStorage.getItem("appConfig");
+  if (savedConfig) {
+    try {
+      const parsed = JSON.parse(savedConfig);
+      Object.assign(appConfig, parsed);
+    } catch (e) {
+      console.error("Failed to load config:", e);
+    }
+  }
+
   unlistenDragDrop = await getCurrentWebview().onDragDropEvent((event: any) => {
     const { type, position, paths } = event.payload;
 
@@ -237,7 +253,6 @@ async function copyToClipboard() {
   if (!outputContext.value) return;
   try {
     await navigator.clipboard.writeText(outputContext.value);
-    alert("上下文已成功复制到剪贴板！");
   } catch (e) {
     console.error(e);
   }
@@ -309,7 +324,7 @@ function handleWheel(e: WheelEvent) {
             CodePulse <span class="ml-2 font-medium opacity-20 text-xl">码脉</span>
           </h1>
           <p class="text-app-text-dim text-sm mt-1 font-medium italic opacity-70">
-            优雅解析项目依赖，构建精准提示词上下文
+            一键解析项目依赖，构建完整提示词上下文
           </p>
       </div>
       <button 
@@ -325,20 +340,20 @@ function handleWheel(e: WheelEvent) {
     </div>
 
     <!-- Top Section: Drop Zone & User Prompt -->
-    <div class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 shrink-0">
+    <div class="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 shrink-0">
       <!-- Left: Drop Zone Card -->
       <div 
         data-drop-zone="main"
         class="h-56 rounded-3xl border-2 border-dashed flex flex-col items-center justify-center transition-all duration-500 relative overflow-hidden group shadow-app-md bg-app-surface/50 backdrop-blur-sm"
         :class="isDragging ? 'border-app-primary bg-app-primary-light ring-4 ring-app-primary/5' : 'border-app-border hover:border-app-primary/40 hover:bg-app-surface'"
       >
-        <div class="pointer-events-none flex flex-col items-center space-y-3 z-10 w-full px-6">
-          <div class="w-12 h-12 flex items-center justify-center bg-app-bg rounded-2xl shadow-sm group-hover:bg-app-primary group-hover:scale-110 transition-all duration-500">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-app-text-mute group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div class="flex flex-col items-center space-y-3 z-10 w-full px-6">
+          <div class="w-12 h-12 flex items-center justify-center bg-app-surface rounded-2xl shadow-sm transition-all duration-500 pointer-events-none">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-app-text-mute transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
           </div>
-          <p class="text-base font-bold text-app-text-dim group-hover:text-app-text transition-colors tracking-tight">
+          <p class="text-base font-bold text-app-text-dim group-hover:text-app-text transition-colors tracking-tight pointer-events-none">
             {{ isDragging ? '松开即刻解析...' : '拖入项目文件夹或代码文件' }}
           </p>
           <div v-if="!isDragging" class="flex gap-2 pt-1">
@@ -351,7 +366,7 @@ function handleWheel(e: WheelEvent) {
         <div v-if="filesList.length > 0 && !isDragging" 
             ref="fileListContainer"
             @wheel="handleWheel"
-            class="flex items-center gap-2 w-full overflow-x-auto px-6 mt-4 z-10 custom-scrollbar-h pb-3"
+            class="flex items-center gap-2 w-full overflow-x-auto px-6 mt-4 z-10 custom-scrollbar-h pb-2"
         >
             <div 
               v-for="(file, idx) in filesList" 
@@ -382,7 +397,7 @@ function handleWheel(e: WheelEvent) {
         <textarea 
           v-model="userPrompt"
           placeholder="例如：请作为核心开发者对这些逻辑做 Code Review；或指定特定功能模块的重构需求..."
-          class="w-full flex-1 p-5 resize-none text-app-text placeholder:text-app-text-mute bg-transparent focus:outline-none font-sans text-sm leading-relaxed"
+          class="w-full flex-1 px-5 py-4 resize-none text-app-text placeholder:text-app-text-mute bg-transparent focus:outline-none font-sans text-sm leading-relaxed"
         ></textarea>
       </div>
     </div>
@@ -392,13 +407,13 @@ function handleWheel(e: WheelEvent) {
         <button 
           @click="processPaths(filesList.map(f => f.path))"
           :disabled="filesList.length === 0 || isLoading"
-          class="h-14 px-12 group/btn bg-app-text hover:bg-app-primary text-app-bg font-black rounded-2xl shadow-xl shadow-app-text/10 transition-all active:scale-95 disabled:opacity-20 disabled:cursor-not-allowed flex items-center gap-3"
+          class="h-14 px-10 group/btn bg-app-text hover:bg-app-primary text-app-bg font-black rounded-2xl shadow-xl shadow-app-text/10 transition-all active:scale-95 disabled:opacity-20 disabled:cursor-not-allowed flex items-center gap-3 cursor-pointer"
         >
-          <span v-if="isLoading" class="flex items-center gap-2">
+          <span v-if="isLoading" class="flex items-center gap-4">
               <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
               深度构建中...
           </span>
-          <span v-else class="flex items-center gap-2">
+          <span v-else class="flex items-center gap-4">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform group-hover/btn:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
               即刻生成完整上下文
           </span>
@@ -406,7 +421,7 @@ function handleWheel(e: WheelEvent) {
     </div>
 
     <!-- Bottom: Results Area -->
-    <div class="w-full max-w-6xl flex-1 flex min-h-[420px] gap-6 mb-4 overflow-hidden">
+    <div class="w-full max-w-6xl flex-1 flex min-h-[420px] gap-6 mb-4">
       <!-- Left: Sidebar Tree -->
       <DependencyTreeSidebar 
         :fileNodes="fileNodes" 
@@ -416,22 +431,21 @@ function handleWheel(e: WheelEvent) {
       />
 
       <!-- Right: Main Context Output -->
-      <div class="flex-1 flex flex-col bg-app-surface border border-app-border rounded-3xl overflow-hidden shadow-app-md relative">
-        <div class="px-6 py-4 bg-app-surface/80 border-b border-app-border flex justify-between items-center backdrop-blur-xl shrink-0 z-10">
+      <div class="flex-1 flex flex-col bg-app-surface border border-app-border rounded-3xl shadow-app-md relative">
+        <div class="px-5 py-2 bg-app-surface/80 border-b border-app-border rounded-t-3xl flex justify-between items-center backdrop-blur-xl shrink-0 z-10">
           <div class="flex flex-col">
-              <span class="text-sm font-black text-app-text flex items-center gap-2">
-                  上下文视图
-                  <span v-if="outputContext" class="text-[9px] bg-app-text/5 text-app-text px-2 py-0.5 rounded-full border border-app-text/10 font-black">
-                    {{ totalCharacters.toLocaleString() }} CHR
+              <span class="text-sm font-black text-app-text flex items-center gap-4">
+                  输出上下文
+                  <span v-if="outputContext" class="text-[9px] bg-app-text/5 text-app-text px-2 py-0.5 rounded-lg border border-app-text/10 font-black">
+                    {{ totalCharacters.toLocaleString() }} 字
                   </span>
               </span>
-              <span class="text-[10px] text-app-text-mute font-medium">包含架构预览与完整代码实现</span>
           </div>
           <div class="flex items-center space-x-2">
             <button 
               v-if="outputContext"
               @click="toggleEdit"
-              class="p-2 bg-app-surface hover:bg-app-surface-hover text-app-text-dim hover:text-app-primary rounded-xl transition-all border border-app-border cursor-pointer"
+              class="p-1.5 bg-app-surface hover:bg-app-surface-hover text-app-text-dim hover:text-app-primary rounded-lg transition-all border border-app-border cursor-pointer"
               :class="isEditing ? 'bg-app-primary/5 border-app-primary/30 ring-2 ring-app-primary/5 text-app-primary' : ''"
               :title="isEditing ? '应用更改' : '快速编辑'"
             >
@@ -440,7 +454,7 @@ function handleWheel(e: WheelEvent) {
             </button>
             <button 
               @click="copyToClipboard"
-              class="p-2 py-1.5 bg-app-text hover:bg-app-text/90 text-app-bg text-[11px] font-black rounded-lg transition-all active:scale-95 flex items-center gap-1.5 shadow-sm"
+              class="p-2 py-1.5 bg-app-text hover:bg-app-text/90 text-app-bg text-[11px] font-black rounded-lg transition-all active:scale-95 flex items-center gap-1.5 shadow-sm cursor-pointer"
               title="复制全部"
             >
               复制
@@ -448,15 +462,16 @@ function handleWheel(e: WheelEvent) {
             </button>
           </div>
         </div>
-        
-        <textarea 
-          ref="outputAreaRef"
-          :readonly="!isEditing"
-          v-model="outputContext"
-          placeholder="所有的上下文内容都在这里准备就绪..."
-          class="w-full flex-1 p-6 focus:outline-none font-mono text-[13px] leading-relaxed resize-none transition-all duration-300 z-0 bg-transparent text-app-text placeholder:text-app-text-mute"
-          :class="isEditing ? 'bg-app-primary/5' : ''"
-        ></textarea>
+        <div class="overflow-hidden w-full h-full flex-1 rounded-b-3xl py-2 px-2">
+          <textarea 
+            ref="outputAreaRef"
+            :readonly="!isEditing"
+            v-model="outputContext"
+            placeholder="所有的上下文内容都在这里准备就绪..."
+            class="w-full h-full flex-1 p-2 focus:outline-none font-mono text-[13px] leading-relaxed resize-none transition-all duration-300 z-0 bg-transparent text-app-text placeholder:text-app-text-mute"
+            :class="[isEditing ? 'bg-app-primary/5 cursor-text!' : 'cursor-default']"
+          ></textarea>
+        </div>
         
         <!-- Loading Overlay -->
         <div v-if="isLoading" class="absolute inset-0 bg-app-surface/60 backdrop-blur-md flex flex-col items-center justify-center z-20 pointer-events-none transition-all">
@@ -464,7 +479,7 @@ function handleWheel(e: WheelEvent) {
              <div class="absolute inset-0 rounded-full border-4 border-app-primary/10"></div>
              <div class="absolute inset-0 rounded-full border-4 border-t-app-primary animate-spin"></div>
           </div>
-          <p class="text-app-primary font-black tracking-widest text-xs uppercase animate-pulse">正在精析依赖系统</p>
+          <p class="text-app-primary font-black tracking-widest text-xs uppercase animate-pulse">正在解析依赖...</p>
         </div>
       </div>
     </div>

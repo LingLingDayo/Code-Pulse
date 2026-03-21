@@ -37,12 +37,12 @@ function bubbleDelete(fullPath: string, absPath: string, originIds?: string[]) {
 </script>
 
 <template>
-  <div class="px-3"
+  <div class="pl-0"
     :data-drop-path="node.isDirectory ? node.absPath : node.absPath.substring(0, Math.max(node.absPath.lastIndexOf('/'), node.absPath.lastIndexOf('\\')))"
   >
     <div 
-      class="flex items-center justify-between group py-1 px-2 rounded-xl hover:bg-app-bg transition-all duration-300 cursor-pointer"
-      :class="node.isDirectory ? 'mb-0.5' : ''"
+      class="flex items-center justify-between group py-1 px-2 rounded-xl hover:bg-app-surface-hover transition-all duration-300"
+      :class="node.isDirectory ? 'mb-0.5 cursor-pointer' : ''"
       @click="toggle"
     >
       <div class="flex items-center space-x-2.5 overflow-hidden">
@@ -59,14 +59,14 @@ function bubbleDelete(fullPath: string, absPath: string, originIds?: string[]) {
       </div>
       <button 
         @click.stop="handleDelete"
-        class="opacity-0 group-hover:opacity-100 p-1.5 text-app-text-mute hover:text-app-rose hover:bg-app-rose/10 transition-all rounded-lg"
+        class="opacity-0 group-hover:opacity-100 p-1.5 text-app-text-mute hover:text-app-rose hover:bg-app-rose/10 transition-all rounded-lg cursor-pointer"
         title="移除"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
       </button>
     </div>
     
-    <div v-show="node.isDirectory && isExpandedLocal" class="border-l border-app-border ml-3.5 pl-1 transition-all">
+    <div v-show="node.isDirectory && isExpandedLocal" class="border-l border-app-border ml-3.5 transition-all">
       <FileTreeNode
         v-for="child in node.children"
         :key="child.fullPath"
