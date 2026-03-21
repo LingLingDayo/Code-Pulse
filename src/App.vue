@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { open } from "@tauri-apps/plugin-dialog";
 
 const maxDepth = ref(3);
 const generateTree = ref(true);
@@ -10,9 +11,6 @@ const isDragging = ref(false);
 const isLoading = ref(false);
 const filesList = ref<string[]>([]);
 const isSettingsOpen = ref(false);
-
-const fileInput = ref<HTMLInputElement | null>(null);
-const dirInput = ref<HTMLInputElement | null>(null);
 
 let unlistenDragDrop: () => void;
 
@@ -87,27 +85,31 @@ async function copyToClipboard() {
   }
 }
 
-function triggerFileInput() {
-    fileInput.value?.click();
-}
-
-function triggerDirInput() {
-    dirInput.value?.click();
-}
-
-function handleFileInput(e: Event) {
-    const target = e.target as HTMLInputElement;
-    if (!target.files) return;
-    const newPaths: string[] = [];
-    for (let i = 0; i < target.files.length; i++) {
-        const file = target.files[i] as any;
-        if (file.path) newPaths.push(file.path);
-        else newPaths.push(file.name);
+async function triggerFileInput() {
+    const selected = await open({
+        multiple: true,
+        directory: false,
+    });
+    if (selected && Array.isArray(selected)) {
+        filesList.value = selected;
+        processPaths(selected);
+    } else if (selected && typeof selected === 'string') {
+        filesList.value = [selected];
+        processPaths([selected]);
     }
-    target.value = ''; // Reset to allow re-selection
-    if (newPaths.length > 0) {
-        filesList.value = newPaths;
-        processPaths(newPaths);
+}
+
+async function triggerDirInput() {
+    const selected = await open({
+        multiple: true,
+        directory: true,
+    });
+    if (selected && Array.isArray(selected)) {
+        filesList.value = selected;
+        processPaths(selected);
+    } else if (selected && typeof selected === 'string') {
+        filesList.value = [selected];
+        processPaths([selected]);
     }
 }
 </script>
@@ -130,10 +132,6 @@ function handleFileInput(e: Event) {
     <p class="text-slate-400 mb-8 max-w-lg text-center font-medium">
       拖拽代码文件或项目目录，一键深度递归解析依赖，自动生成供大语言模型阅读的完整代码上下文。
     </p>
-
-    <!-- Hidden Native Inputs -->
-    <input type="file" ref="fileInput" multiple @change="handleFileInput" class="hidden" />
-    <input type="file" ref="dirInput" webkitdirectory directory @change="handleFileInput" class="hidden" />
 
     <!-- Drop Zone -->
     <div 
