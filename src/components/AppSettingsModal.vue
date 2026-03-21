@@ -88,8 +88,8 @@ const settingsGroups = [
       {
         id: 'autoGenerate',
         type: 'switch',
-        label: '选择文件后立即解析',
-        description: '如果关闭，在拖拽或选择路径后需要手动点击“生成”按钮。'
+        label: '自动解析',
+        description: '开启后，在上传、移除文件或更改相关设置时会自动更新输出结果。'
       },
       {
         id: 'ignoreExts',

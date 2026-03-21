@@ -223,6 +223,26 @@ async function triggerDirInput() {
         if (appConfig.autoGenerate) processPaths([selected]);
     }
 }
+
+function removeFile(index: number) {
+    filesList.value.splice(index, 1);
+    if (appConfig.autoGenerate) {
+        if (filesList.value.length === 0) {
+            fileNodes.value = [];
+            updateOutputContext();
+        } else {
+            processPaths(filesList.value);
+        }
+    }
+}
+
+const fileListContainer = ref<HTMLElement | null>(null);
+function handleWheel(e: WheelEvent) {
+    if (fileListContainer.value) {
+        e.preventDefault();
+        fileListContainer.value.scrollLeft += e.deltaY;
+    }
+}
 </script>
 
 <template>
@@ -278,10 +298,25 @@ async function triggerDirInput() {
           </button>
         </div>
 
-        <div v-if="filesList.length > 0 && !isDragging" class="flex flex-wrap gap-2 justify-center max-w-full overflow-hidden mt-3 z-10 opacity-75 hover:opacity-100 transition-opacity">
-            <span v-for="(file, idx) in filesList" :key="idx" class="text-xs bg-slate-700/80 px-2 py-1 rounded border border-slate-600 truncate max-w-[150px] text-slate-300 font-mono">
-                {{ file.split('/').pop()?.split('\\').pop() }}
-            </span>
+        <div v-if="filesList.length > 0 && !isDragging" 
+            ref="fileListContainer"
+            @wheel="handleWheel"
+            class="flex items-center gap-2 w-full overflow-x-auto px-6 mt-3 z-10 opacity-90 custom-scrollbar-h pb-2"
+        >
+            <div 
+              v-for="(file, idx) in filesList" 
+              :key="idx" 
+              @click="removeFile(idx)"
+              class="group/item flex items-center shrink-0 text-xs bg-slate-700/80 px-2.5 py-1.5 rounded-lg border border-slate-600 hover:border-red-500/50 hover:bg-slate-700 transition-all cursor-pointer text-slate-300 font-mono select-none"
+              title="点击移除此文件/目录"
+            >
+                <span class="truncate max-w-[180px] group-hover/item:text-red-400">
+                    {{ file.split('/').pop()?.split('\\').pop() }}
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 ml-1.5 text-slate-500 group-hover/item:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </div>
         </div>
       </div>
 
@@ -419,5 +454,24 @@ textarea::-webkit-scrollbar-track,
 textarea::-webkit-scrollbar-thumb,
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(100, 116, 139, 0.3);
+}
+
+/* 水平滚动条美化 */
+.custom-scrollbar-h::-webkit-scrollbar {
+  height: 4px;
+}
+
+.custom-scrollbar-h::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 0 20px;
+}
+
+.custom-scrollbar-h::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 10px;
+}
+
+.custom-scrollbar-h::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
 }
 </style>
