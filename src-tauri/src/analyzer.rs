@@ -128,6 +128,7 @@ fn find_project_root(start_path: &Path) -> PathBuf {
 pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize) -> Result<String, String> {
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut result_blocks: Vec<String> = Vec::new();
+    let mut parsed_paths: Vec<String> = Vec::new();
 
     let supported_exts = vec!["js", "jsx", "ts", "tsx", "vue", "svelte", "py", "rs"];
 
@@ -147,16 +148,42 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize) -> Result<Stri
                         if path_str.contains("node_modules") || path_str.contains(".git") || path_str.contains("dist") || path_str.contains("target") {
                             continue;
                         }
-                        process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &base_path);
+                        process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path);
                     }
                 }
             }
         } else {
-            process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &base_path);
+            process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path);
         }
     }
 
-    Ok(result_blocks.join("\n\n"))
+    let tree_str = build_file_tree(&parsed_paths);
+    let mut final_blocks = vec![tree_str];
+    final_blocks.extend(result_blocks);
+
+    Ok(final_blocks.join("\n\n"))
+}
+
+fn build_file_tree(paths: &[String]) -> String {
+    let mut tree = String::from("========================================\n[FILE TREE]\n========================================\n.\n");
+    let mut sorted_paths = paths.to_vec();
+    sorted_paths.sort();
+    
+    let mut prev_components: Vec<String> = Vec::new();
+    for path in &sorted_paths {
+        let components: Vec<String> = path.split('/').map(|s| s.to_string()).collect();
+        let mut i = 0;
+        while i < components.len() && i < prev_components.len() && components[i] == prev_components[i] {
+            i += 1;
+        }
+        while i < components.len() {
+            let indent = "│   ".repeat(i);
+            tree.push_str(&format!("{}├── {}\n", indent, components[i]));
+            i += 1;
+        }
+        prev_components = components;
+    }
+    tree
 }
 
 fn process_file(
@@ -165,6 +192,7 @@ fn process_file(
     max_depth: usize, 
     visited: &mut HashSet<PathBuf>, 
     result_blocks: &mut Vec<String>,
+    parsed_paths: &mut Vec<String>,
     base_path: &Path
 ) {
     if current_depth > max_depth || !path.exists() { return; }
@@ -191,6 +219,8 @@ fn process_file(
             }
         }
 
+        parsed_paths.push(display_path_str.clone());
+
         result_blocks.push(format!(
             "========================================\n[FILE PATH]: {}\n(Dependency Layer: {})\n========================================\n[CONTENT START]\n{}\n[CONTENT END]", 
             display_path_str, current_depth, content
@@ -201,7 +231,7 @@ fn process_file(
         
         for dep in extract_dependencies(&content, ext) {
             if let Some(resolved) = resolve_path(base_dir, &dep, ext) {
-                process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, base_path);
+                process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path);
             }
         }
     }
