@@ -32,9 +32,88 @@ static HTML_RE: OnceLock<Regex> = OnceLock::new();
 // md: [text](link)
 static MD_RE: OnceLock<Regex> = OnceLock::new();
 
+// 注释剥离辅助正则
+static C_STYLE_RE: OnceLock<Regex> = OnceLock::new();
+static HASH_STYLE_RE: OnceLock<Regex> = OnceLock::new();
+static HTML_COMMENT_RE: OnceLock<Regex> = OnceLock::new();
+
+fn get_c_style_re() -> &'static Regex {
+    C_STYLE_RE.get_or_init(|| {
+        // 匹配 /*...*/ 或 //... 或 字符串（保持字符串不变以免误删内部路径）
+        Regex::new(r#"(?s)/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`"#).unwrap()
+    })
+}
+
+fn get_hash_style_re() -> &'static Regex {
+    HASH_STYLE_RE.get_or_init(|| {
+        // 匹配 #... 或 字符串
+        Regex::new(r#"(?s)#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|"""(?:\\.|[^"])*"""|'''(?:\\.|[^'])*'''"#).unwrap()
+    })
+}
+
+fn get_html_comment_re() -> &'static Regex {
+    HTML_COMMENT_RE.get_or_init(|| {
+        Regex::new(r#"(?s)<!--.*?-->"#).unwrap()
+    })
+}
+
+fn strip_comments(content: &str, ext: &str) -> String {
+    match ext {
+        "js" | "mjs" | "jsx" | "ts" | "tsx" | "rs" | "go" | "java" | "kt" | "c" | "cpp" | "h" | "hpp" | "cs" | "php" | "css" | "scss" | "less" => {
+            let re = get_c_style_re();
+            re.replace_all(content, |caps: &regex::Captures| {
+                let m = caps.get(0).unwrap().as_str();
+                if m.starts_with('/') {
+                    // 保留换行符以维持行数和锚点正确性
+                    m.chars().map(|c| if c == '\n' { '\n' } else { ' ' }).collect::<String>()
+                } else {
+                    m.to_string()
+                }
+            }).into_owned()
+        }
+        "py" | "rb" => {
+            let re = get_hash_style_re();
+            re.replace_all(content, |caps: &regex::Captures| {
+                let m = caps.get(0).unwrap().as_str();
+                if m.starts_with('#') {
+                    " ".to_string()
+                } else {
+                    m.to_string()
+                }
+            }).into_owned()
+        }
+        "html" => {
+            let re = get_html_comment_re();
+            re.replace_all(content, |caps: &regex::Captures| {
+                let m = caps.get(0).unwrap().as_str();
+                m.chars().map(|c| if c == '\n' { '\n' } else { ' ' }).collect::<String>()
+            }).into_owned()
+        }
+        "vue" | "svelte" => {
+            // 先剥离 HTML 注释，再剥离 JS 注释
+            let html_re = get_html_comment_re();
+            let intermediate = html_re.replace_all(content, |caps: &regex::Captures| {
+                let m = caps.get(0).unwrap().as_str();
+                m.chars().map(|c| if c == '\n' { '\n' } else { ' ' }).collect::<String>()
+            }).into_owned();
+            let c_re = get_c_style_re();
+            c_re.replace_all(&intermediate, |caps: &regex::Captures| {
+                let m = caps.get(0).unwrap().as_str();
+                if m.starts_with('/') {
+                    m.chars().map(|c| if c == '\n' { '\n' } else { ' ' }).collect::<String>()
+                } else {
+                    m.to_string()
+                }
+            }).into_owned()
+        }
+        _ => content.to_string(),
+    }
+}
+
 fn get_js_re() -> &'static Regex {
     JS_RE.get_or_init(|| {
-        Regex::new(r#"(?:(?:import|export).*from\s+['"]([^'"]+)['"]|require\(['"]([^'"]+)['"]\)|import\s+['"]([^'"]+)['"])"#).unwrap()
+        // 增加行首锚点支持静态 import，并优化动态 import 兼容性
+        Regex::new(r#"(?m)(?:^\s*(?:import|export).*from\s+['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\)|import\s*\(?\s*['"]([^'"]+)['"]\s*\)?)"#).unwrap()
     })
 }
 
@@ -94,7 +173,7 @@ fn get_rb_re() -> &'static Regex {
 
 fn get_css_re() -> &'static Regex {
     CSS_RE.get_or_init(|| {
-        Regex::new(r#"(?m)@import\s+(?:url\(['"]?([^'"]+?)['"]?\)|['"]([^'"]+)['"])"#).unwrap()
+        Regex::new(r#"(?m)^\s*@import\s+(?:url\(['"]?([^'"]+?)['"]?\)|['"]([^'"]+)['"])"#).unwrap()
     })
 }
 
@@ -112,7 +191,8 @@ fn get_md_re() -> &'static Regex {
 
 fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
     let mut deps = Vec::new();
-    let content_lf = content.replace("\r\n", "\n");
+    let content_stripped = strip_comments(content, ext);
+    let content_lf = content_stripped.replace("\r\n", "\n");
     match ext {
         "js" | "mjs" | "jsx" | "ts" | "tsx" | "vue" | "svelte" => {
             let re = get_js_re();
