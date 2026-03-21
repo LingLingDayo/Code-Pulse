@@ -1,12 +1,35 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 const maxDepth = ref(3);
 const outputContext = ref("");
 const isDragging = ref(false);
 const isLoading = ref(false);
 const filesList = ref<string[]>([]);
+let unlistenDragDrop: () => void;
+
+onMounted(async () => {
+  unlistenDragDrop = await getCurrentWebview().onDragDropEvent((event) => {
+    if (event.payload.type === 'over' || event.payload.type === 'enter') {
+      isDragging.value = true;
+    } else if (event.payload.type === 'leave') {
+      isDragging.value = false;
+    } else if (event.payload.type === 'drop') {
+      isDragging.value = false;
+      const paths = event.payload.paths;
+      if (paths && paths.length > 0) {
+        filesList.value = paths;
+        processPaths(paths);
+      }
+    }
+  });
+});
+
+onUnmounted(() => {
+  if (unlistenDragDrop) unlistenDragDrop();
+});
 
 async function processPaths(paths: string[]) {
   if (paths.length === 0) return;
@@ -40,8 +63,10 @@ function handleDrop(event: DragEvent) {
             paths.push(file.name);
         }
     }
-    filesList.value = paths;
-    processPaths(paths);
+    if (paths.length > 0) {
+      filesList.value = paths;
+      processPaths(paths);
+    }
   }
 }
 
