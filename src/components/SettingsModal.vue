@@ -85,7 +85,7 @@ const isExpanded = (groupId: string) => expandedGroups.value.includes(groupId);
               </svg>
             </h4>
             
-            <div v-show="isExpanded(group.id)" class="space-y-8 animate-in slide-in-from-top-2 duration-500">
+            <div v-show="isExpanded(group.id)" class="space-y-6 animate-in slide-in-from-top-2 duration-500">
               <template v-for="item in group.items" :key="item.id">
                 <DynamicControl :config="item" v-model="localSettings[item.id]" />
               </template>

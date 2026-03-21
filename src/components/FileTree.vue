@@ -91,7 +91,7 @@ function handleUploadFiles(files: string[], destDir: string) {
 
 <style scoped>
 .file-tree::-webkit-scrollbar {
-  width: 3px;
+  width: 4px;
 }
 .file-tree::-webkit-scrollbar-track {
   background: transparent;

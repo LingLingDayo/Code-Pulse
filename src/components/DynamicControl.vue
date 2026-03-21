@@ -126,11 +126,15 @@ const value = computed({
 </template>
 
 <style scoped>
-.custom-scrollbar::-webkit-scrollbar { width: 3px; }
+.custom-scrollbar::-webkit-scrollbar { 
+    width: 4px; 
+    cursor: default;
+}
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { 
     background: var(--color-app-border); 
     border-radius: 10px;
+    cursor: default;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--color-app-text-mute); }
 </style>
