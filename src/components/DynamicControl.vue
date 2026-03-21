@@ -72,7 +72,8 @@ const value = computed({
 
   <!-- Radio -->
   <div v-else-if="config.type === 'radio'" class="space-y-2 mt-4 inline-block w-full">
-    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ config.label }}</label>
+    <label class="block text-sm font-semibold text-slate-300">{{ config.label }}</label>
+    <p v-if="config.description" class="text-xs text-slate-500 pb-1">{{ config.description }}</p>
     <div class="flex gap-6">
       <label v-for="opt in config.options" :key="opt.value" class="flex items-center space-x-2 cursor-pointer">
         <input type="radio" :value="opt.value" v-model="value" class="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500 focus:ring-1">
@@ -83,7 +84,8 @@ const value = computed({
 
   <!-- Checkbox -->
   <div v-else-if="config.type === 'checkbox'" class="space-y-2 mt-4 inline-block w-full">
-    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ config.label }}</label>
+    <label class="block text-sm font-semibold text-slate-300">{{ config.label }}</label>
+    <p v-if="config.description" class="text-xs text-slate-500 pb-1">{{ config.description }}</p>
     <div class="flex flex-wrap gap-6">
       <label v-for="opt in config.options" :key="opt.value" class="flex items-center space-x-2 cursor-pointer">
         <input type="checkbox" :value="opt.value" v-model="value" class="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500 focus:ring-1">
