@@ -15,6 +15,7 @@ const isSettingsOpen = ref(false);
 const userPrompt = ref("");
 const isEditing = ref(false);
 const outputAreaRef = ref<HTMLTextAreaElement | null>(null);
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const totalCharacters = computed(() => {
   return outputContext.value ? outputContext.value.length : 0;
@@ -296,21 +297,31 @@ async function triggerDirInput() {
 
 function removeFile(index: number) {
     filesList.value.splice(index, 1);
-    if (appConfig.autoGenerate) {
-        if (filesList.value.length === 0) {
-            fileNodes.value = [];
-            updateOutputContext();
-        } else {
-            processPaths(filesList.value.map((f: {path: string}) => f.path));
-        }
+    if (!appConfig.autoGenerate) return;
+
+    if (debounceTimer) {
+        clearTimeout(debounceTimer);
     }
+
+    if (filesList.value.length === 0) {
+        fileNodes.value = [];
+        updateOutputContext();
+        return;
+    }
+
+    debounceTimer = setTimeout(() => {
+        processPaths(filesList.value.map((f: {path: string}) => f.path));
+    }, 400);
 }
 
 const fileListContainer = ref<HTMLElement | null>(null);
 function handleWheel(e: WheelEvent) {
     if (fileListContainer.value) {
         e.preventDefault();
-        fileListContainer.value.scrollLeft += e.deltaY;
+        fileListContainer.value.scrollBy({
+            left: e.deltaY,
+            behavior: 'smooth'
+        });
     }
 }
 </script>
@@ -321,7 +332,7 @@ function handleWheel(e: WheelEvent) {
     <div class="w-full max-w-6xl flex justify-between items-center mb-8 shrink-0">
       <div class="flex flex-col">
           <h1 class="text-3xl font-black text-app-text tracking-tight flex items-center">
-            CodePulse <span class="ml-2 font-medium opacity-20 text-xl">码脉</span>
+            CodePulse <span class="ml-2 font-medium opacity-20 text-xl">文脉</span>
           </h1>
           <p class="text-app-text-dim text-sm mt-1 font-medium italic opacity-70">
             一键解析项目依赖，构建完整提示词上下文
@@ -354,7 +365,7 @@ function handleWheel(e: WheelEvent) {
             </svg>
           </div>
           <p class="text-base font-bold text-app-text-dim group-hover:text-app-text transition-colors tracking-tight pointer-events-none">
-            {{ isDragging ? '松开即刻解析...' : '拖入项目文件夹或代码文件' }}
+            {{ isDragging ? '松开即刻解析...' : '拖入代码文件或功能块目录' }}
           </p>
           <div v-if="!isDragging" class="flex gap-2 pt-1">
               <button @click="triggerFileInput" class="px-3 py-1 bg-app-bg text-[11px] font-bold text-app-text-dim hover:text-app-text border border-app-border rounded-lg hover:border-app-primary/50 transition-all cursor-pointer shadow-sm">添加文件</button>
@@ -421,7 +432,7 @@ function handleWheel(e: WheelEvent) {
     </div>
 
     <!-- Bottom: Results Area -->
-    <div class="w-full max-w-6xl flex-1 flex min-h-[420px] gap-6 mb-4">
+    <div class="w-full max-w-6xl flex-1 flex min-h-[420px] gap-6 mb-2">
       <!-- Left: Sidebar Tree -->
       <DependencyTreeSidebar 
         :fileNodes="fileNodes" 
@@ -436,7 +447,7 @@ function handleWheel(e: WheelEvent) {
           <div class="flex flex-col">
               <span class="text-sm font-black text-app-text flex items-center gap-4">
                   输出上下文
-                  <span v-if="outputContext" class="text-[9px] bg-app-text/5 text-app-text px-2 py-0.5 rounded-lg border border-app-text/10 font-black">
+                  <span v-if="outputContext" class="text-[9px] bg-app-text/5 text-app-text px-3 py-0.5 rounded-lg border border-app-text/10 font-black">
                     {{ totalCharacters.toLocaleString() }} 字
                   </span>
               </span>
@@ -506,11 +517,16 @@ function handleWheel(e: WheelEvent) {
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-app-border);
+  padding: 5px;
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-app-text-mute);
+}
+
+.custom-scrollbar-h {
+  scroll-behavior: smooth;
 }
 
 .custom-scrollbar-h::-webkit-scrollbar {
