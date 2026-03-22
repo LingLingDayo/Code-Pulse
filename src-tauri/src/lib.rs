@@ -25,7 +25,8 @@ async fn generate_context(
     included_types: Vec<String>, 
     project_roots: String, 
     enable_minimization: bool,
-    minimization_threshold: usize
+    minimization_threshold: usize,
+    minimization_depth_threshold: usize
 ) -> Result<Vec<analyzer::FileNode>, String> {
     state.abort_handle.store(false, Ordering::SeqCst);
     let abort_handle = state.abort_handle.clone();
@@ -43,6 +44,7 @@ async fn generate_context(
             project_roots, 
             enable_minimization,
             minimization_threshold,
+            minimization_depth_threshold,
             Some(abort_handle),
             parse_cache
         )

@@ -59,6 +59,7 @@ const appConfig = reactive({
   projectRoots: "",
   enableMinimization: true,
   minimizationThreshold: 8000,
+  minimizationDepthThreshold: 2,
 });
 
 watch(appConfig, (newVal) => {
@@ -190,6 +191,7 @@ async function processPaths(paths: string[]) {
       projectRoots: appConfig.projectRoots,
       enableMinimization: appConfig.enableMinimization,
       minimizationThreshold: appConfig.minimizationThreshold,
+      minimizationDepthThreshold: appConfig.minimizationDepthThreshold,
     });
     
     // 中断检查
