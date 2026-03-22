@@ -66,6 +66,40 @@ watch(appConfig, (newVal) => {
   localStorage.setItem("appConfig", JSON.stringify(newVal));
 }, { deep: true });
 
+// 影响解析核心逻辑的配置项（排除 UI 逻辑项）
+const analysisSettingsTrigger = computed(() => {
+  const { autoGenerate, customPrompt, generateTree, ...analysisBase } = appConfig;
+  return JSON.stringify(analysisBase);
+});
+
+// 影响前端最终拼接结果的配置项
+const uiFormattingTrigger = computed(() => {
+  return JSON.stringify({
+    customPrompt: appConfig.customPrompt,
+    generateTree: appConfig.generateTree
+  });
+});
+
+// 当解析参数改变时，清理后端缓存任务
+watch(analysisSettingsTrigger, async () => {
+    try {
+      await invoke("clear_cache");
+      // 如果开启了自动解析且当前已有文件，则重新触发解析
+      if (appConfig.autoGenerate && filesList.value.length > 0) {
+        processPaths(filesList.value.map(f => f.path));
+      }
+    } catch (e) {
+      console.error("Failed to clear cache:", e);
+    }
+});
+
+// 当格式化参数改变时，仅重新生成输出文本
+watch(uiFormattingTrigger, () => {
+  if (appConfig.autoGenerate && fileNodes.value.length > 0) {
+    updateOutputContext();
+  }
+});
+
 let unlistenDragDrop: () => void;
 let lastHighlightedNode: HTMLElement | null = null;
 

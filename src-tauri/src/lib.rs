@@ -56,6 +56,11 @@ fn abort_generate_context(state: tauri::State<'_, AppState>) {
     state.abort_handle.store(true, Ordering::SeqCst);
 }
 
+#[tauri::command]
+fn clear_cache(state: tauri::State<'_, AppState>) {
+    state.parse_cache.lock().unwrap().clear();
+}
+
 fn copy_recursively(source: impl AsRef<Path>, destination: impl AsRef<Path>) -> std::io::Result<()> {
     fs::create_dir_all(&destination)?;
     for entry in fs::read_dir(source)? {
@@ -118,7 +123,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             generate_context, 
             copy_files_to_dest,
-            abort_generate_context
+            abort_generate_context,
+            clear_cache
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
