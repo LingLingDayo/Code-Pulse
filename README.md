@@ -12,9 +12,10 @@
 
 ## ✨ 核心特性
 
-- **🔍 深度依赖追踪 (Multi-language Support)**: 自动解析 20 余种主流编程语言（包括 TS/JS, Rust, Python, Go, Java, C++, Ruby, PHP 等）的依赖引用，递归获取所有关联源代码。
+- **🔍 深度依赖追踪 (Multi-language Support)**: 自动解析 10 余种主流编程语言（包括 TS/JS, Rust, Python, Go, Java, C++, Ruby, PHP 等，并增强了对 Vue 自动引入组件的深度支持）的依赖引用。
 - **🛡️ 智能过滤与忽略**: 内置 50+ 项过滤规则（如 `.git`, `node_modules`, `target`, `build`, `bin`, `obj` 等），并支持自定义 Glob 模式和后缀过滤。
-- **⚡ 极致上下文压缩 (Context Minimization)**: **核心黑科技** —— 对非直接选区的引用文件，支持自动移除函数/类成员实现而仅保留定义。该功能可大幅优化 LLM 上下文空间，将关键 Token 留给核心业务代码。
+- **🚀 极速响应与任务控制**: **后台缓存技术** —— 内置后端文件级缓存层，支持秒级重复解析；同时解析过程支持随时手动中断，操作无负担。
+- **⚡ 上下文压缩 (Context Minimization)**: 支持自动移除函数/类成员实现而仅保留定义。该功能可大幅优化 LLM 上下文空间，将关键 Token 留给核心业务代码。
 - **🌳 结构化文件树**: 自动在输出框顶部生成清爽的 `FILE TREE`，使 AI 在接收代码前先掌握项目的整体文件拓扑。
 - **✍️ 实时预览与精修**: 结果生成后支持直接在输出框内进行二次编辑，并在边缘提供字数统计，确保 Prompt 完美符合预期。
 - **🎨 现代交互体验**: 基于 **Tauri 2.x + Vue 3 + Tailwind CSS 4.x** 构建，界面采用极简 Apple/Linear 风格，支持全局拖放、横向滚动管理和毛玻璃视觉效果。
@@ -90,7 +91,7 @@ npm run tauri build
 - **前端框架**: [Vue 3](https://vuejs.org/) (Composition API)
 - **桌面引擎**: [Tauri 2.0](https://tauri.app/) (Rust 驱动，极小体积与极致安全)
 - **样式系统**: [Tailwind CSS 4.x](https://tailwindcss.com/)
-- **解析内核**: 基于 Rust 的 Regex 驱动的高性能依赖嗅探器。
+- **解析内核**: 基于 Rust 的 Regex 驱动的高性能依赖嗅探器，支持细粒度缓存层。
 
 ---
 
