@@ -749,7 +749,7 @@ fn process_file(
         parsed_paths.push(display_path_str.clone());
 
         let mut final_content = content.clone();
-        if enable_minimization && *current_total_size > minimization_threshold && current_depth >= minimization_depth_threshold {
+        if enable_minimization && (*current_total_size + content.len() > minimization_threshold) && current_depth >= minimization_depth_threshold {
             // Only minimize for JS/TS/Rust/Go/Java/C++ etc. (bracket-based languages)
             let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("");
             match ext {
