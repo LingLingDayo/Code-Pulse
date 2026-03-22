@@ -551,12 +551,14 @@ pub fn analyze_dependencies(
     included_types: Vec<String>, 
     project_roots: String, 
     enable_minimization: bool,
+    minimization_threshold: usize,
     abort_handle: Option<Arc<AtomicBool>>,
     parse_cache: Arc<ParseCache>
 ) -> Result<Vec<FileNode>, String> {
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut result_blocks: Vec<FileNode> = Vec::new();
     let mut parsed_paths: Vec<String> = Vec::new();
+    let mut current_total_size = 0;
 
     let manual_roots: Vec<PathBuf> = project_roots
         .split(|c| c == ',' || c == '\n' || c == '\r')
@@ -598,7 +600,7 @@ pub fn analyze_dependencies(
                         process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, 
                             &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes,
                             &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes,
-                            &included_types_set, enable_minimization, abort_handle.as_ref(), &parse_cache);
+                            &included_types_set, enable_minimization, minimization_threshold, &mut current_total_size, abort_handle.as_ref(), &parse_cache);
                     }
                 }
             }
@@ -606,7 +608,7 @@ pub fn analyze_dependencies(
             process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, 
                 &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes,
                 &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes,
-                &included_types_set, enable_minimization, abort_handle.as_ref(), &parse_cache);
+                &included_types_set, enable_minimization, minimization_threshold, &mut current_total_size, abort_handle.as_ref(), &parse_cache);
         }
     }
 
@@ -677,6 +679,8 @@ fn process_file(
     ignore_deep_regexes: &[Regex],
     included_types: &HashSet<String>,
     enable_minimization: bool,
+    minimization_threshold: usize,
+    current_total_size: &mut usize,
     abort_handle: Option<&Arc<AtomicBool>>,
     parse_cache: &ParseCache
 ) {
@@ -708,6 +712,7 @@ fn process_file(
         if let Ok(cache) = parse_cache.lock() {
             if let Some((cached_display, cached_content)) = cache.get(key) {
                 parsed_paths.push(cached_display.clone());
+                *current_total_size += cached_content.len();
                 result_blocks.push(FileNode {
                     path: cached_display.clone(),
                     content: cached_content.clone(),
@@ -725,7 +730,7 @@ fn process_file(
                                 process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path,
                                     ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
                                     ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,
-                                    included_types, enable_minimization, abort_handle, parse_cache);
+                                    included_types, enable_minimization, minimization_threshold, current_total_size, abort_handle, parse_cache);
                             }
                         }
                     }
@@ -750,7 +755,7 @@ fn process_file(
         parsed_paths.push(display_path_str.clone());
 
         let mut final_content = content.clone();
-        if enable_minimization && current_depth > 0 {
+        if enable_minimization && *current_total_size > minimization_threshold {
             // Only minimize for JS/TS/Rust/Go/Java/C++ etc. (bracket-based languages)
             let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("");
             match ext {
@@ -765,6 +770,8 @@ fn process_file(
             "========================================\n[FILE PATH]: {}\n(Dependency Layer: {})\n========================================\n[CONTENT START]\n{}\n[CONTENT END]",
             display_path_str, current_depth, final_content
         );
+
+        *current_total_size += formatted_content.len();
 
         // 写入缓存（仅当能获取到 mtime 时）
         if let Some(ref key) = cache_key {
@@ -788,7 +795,7 @@ fn process_file(
                     process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path, 
                         ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
                         ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,
-                        included_types, enable_minimization, abort_handle, parse_cache);
+                        included_types, enable_minimization, minimization_threshold, current_total_size, abort_handle, parse_cache);
                 }
             }
         }

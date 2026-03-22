@@ -53,6 +53,7 @@ const appConfig = reactive({
   customIncludedTypes: "",
   projectRoots: "",
   enableMinimization: true,
+  minimizationThreshold: 8000,
 });
 
 watch(appConfig, (newVal) => {
@@ -165,6 +166,7 @@ async function processPaths(paths: string[]) {
       includedTypes: finalIncludedTypes,
       projectRoots: appConfig.projectRoots,
       enableMinimization: appConfig.enableMinimization,
+      minimizationThreshold: appConfig.minimizationThreshold,
     });
     
     // 中断检查
@@ -211,7 +213,7 @@ function updateOutputContext(requestId?: number) {
         generateTree: appConfig.generateTree,
         customPrompt: appConfig.customPrompt,
         userPrompt: userPrompt.value,
-        longContextThreshold: 8000,
+        longContextThreshold: appConfig.minimizationThreshold,
     });
 }
 

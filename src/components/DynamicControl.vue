@@ -40,13 +40,22 @@ const value = computed({
     <p v-if="config.description" class="text-[11px] text-app-text-mute pb-1 leading-relaxed italic opacity-80">{{ config.description }}</p>
     <div class="relative group">
         <input 
+          v-if="config.inputType === 'number'"
           :id="config.id"
-          type="text" 
+          type="number" 
+          v-model.number="value"
+          class="w-full bg-app-surface border border-app-border rounded-xl px-4 py-2.5 text-[13px] text-app-text font-medium placeholder:text-app-text-mute focus:outline-none focus:border-app-primary/50 focus:ring-4 focus:ring-app-primary/5 transition-all shadow-app-sm"
+          :placeholder="config.placeholder || ''"
+        />
+        <input 
+          v-else
+          :id="config.id"
+          :type="config.inputType || 'text'" 
           v-model="value"
           class="w-full bg-app-surface border border-app-border rounded-xl px-4 py-2.5 text-[13px] text-app-text font-medium placeholder:text-app-text-mute focus:outline-none focus:border-app-primary/50 focus:ring-4 focus:ring-app-primary/5 transition-all shadow-app-sm"
           :placeholder="config.placeholder || ''"
         />
-        <div class="absolute inset-y-0 right-4 flex items-center opacity-0 group-focus-within:opacity-30 transition-opacity">
+        <div class="absolute inset-y-0 right-4 flex items-center opacity-0 group-focus-within:opacity-30 transition-opacity pointer-events-none">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
         </div>
     </div>

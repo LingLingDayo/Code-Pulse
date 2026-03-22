@@ -94,6 +94,14 @@ const settingsGroups = [
         description: '自动移除间接引用文件的函数实现，仅保留定义，大幅节省上下文空间。'
       },
       {
+        id: 'minimizationThreshold',
+        type: 'input',
+        inputType: 'number',
+        label: '压缩触发阈值',
+        description: '当生成内容达到该阈值(字符数)时，自动触发深度压缩以节省上下文空间。',
+        visible: (settings: any) => settings.enableMinimization === true
+      },
+      {
         id: 'ignoreExts',
         type: 'textarea',
         label: '全局忽略项',
