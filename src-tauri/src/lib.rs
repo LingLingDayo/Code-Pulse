@@ -1,18 +1,15 @@
 mod analyzer;
 mod minimizer;
-use std::collections::HashMap;
+mod cache;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
-
-// (规范化绝对路径, 文件最后修改时间) -> (display_path, 最终内容字符串)
-type ParseCache = Mutex<HashMap<(PathBuf, SystemTime), (String, String)>>;
 
 struct AppState {
     abort_handle: Arc<AtomicBool>,
-    parse_cache: Arc<ParseCache>,
+    parse_cache: Arc<cache::FileCache>,
 }
 
 #[tauri::command]
@@ -58,7 +55,7 @@ fn abort_generate_context(state: tauri::State<'_, AppState>) {
 
 #[tauri::command]
 fn clear_cache(state: tauri::State<'_, AppState>) {
-    state.parse_cache.lock().unwrap().clear();
+    state.parse_cache.clear();
 }
 
 fn copy_recursively(source: impl AsRef<Path>, destination: impl AsRef<Path>) -> std::io::Result<()> {
@@ -116,7 +113,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState {
             abort_handle: Arc::new(AtomicBool::new(false)),
-            parse_cache: Arc::new(Mutex::new(HashMap::new())),
+            parse_cache: Arc::new(cache::FileCache::new()),
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())

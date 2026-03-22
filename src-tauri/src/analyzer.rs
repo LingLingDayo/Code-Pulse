@@ -5,12 +5,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::time::SystemTime;
 use walkdir::WalkDir;
-
-// (规范化绝对路径, 文件最后修改时间) -> (display_path, 最终内容字符串)
-type ParseCache = Mutex<HashMap<(PathBuf, SystemTime), (String, String)>>;
 
 // =============================================================================
 // 文件扩展名分类与配置
@@ -554,7 +551,7 @@ pub fn analyze_dependencies(
     minimization_threshold: usize,
     minimization_depth_threshold: usize,
     abort_handle: Option<Arc<AtomicBool>>,
-    parse_cache: Arc<ParseCache>
+    parse_cache: Arc<crate::cache::FileCache>
 ) -> Result<Vec<FileNode>, String> {
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut result_blocks: Vec<FileNode> = Vec::new();
@@ -684,7 +681,7 @@ fn process_file(
     minimization_depth_threshold: usize,
     current_total_size: &mut usize,
     abort_handle: Option<&Arc<AtomicBool>>,
-    parse_cache: &ParseCache
+    parse_cache: &crate::cache::FileCache
 ) {
     if let Some(h) = abort_handle {
         if h.load(Ordering::SeqCst) { return; }
@@ -705,40 +702,35 @@ fn process_file(
     
     visited.insert(abs_path.clone());
 
-    // 尝试获取文件修改时间作为缓存 key 的一部分
+    // 尝试获取文件修改时间并查询缓存
     let mtime = fs::metadata(&abs_path).ok().and_then(|m| m.modified().ok());
-    let cache_key = mtime.map(|t| (abs_path.clone(), t));
 
-    // 查询缓存：命中则直接复用，跳过读文件和解析
-    if let Some(ref key) = cache_key {
-        if let Ok(cache) = parse_cache.lock() {
-            if let Some((cached_display, cached_content)) = cache.get(key) {
-                parsed_paths.push(cached_display.clone());
-                *current_total_size += cached_content.len();
-                result_blocks.push(FileNode {
-                    path: cached_display.clone(),
-                    content: cached_content.clone(),
-                    abs_path: abs_path.to_string_lossy().into_owned(),
-                });
-                // 缓存命中时仍需继续追踪依赖，使用已缓存的原始内容重新提取
-                // 注意：依赖解析本身很快（只是正则），重 IO 部分已命中缓存
-                drop(cache);
-                if let Ok(content) = fs::read_to_string(&abs_path) {
-                    let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                    if !should_ignore(&abs_path, ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes) {
-                        let base_dir = abs_path.parent().unwrap_or(Path::new(""));
-                        for dep in extract_dependencies(&content, ext) {
-                            if let Some(resolved) = resolve_path(base_dir, &dep, ext, base_path) {
-                                process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path,
-                                    ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
-                                    ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,
-                                    included_types, enable_minimization, minimization_threshold, minimization_depth_threshold, current_total_size, abort_handle, parse_cache);
-                            }
+    if let Some(t) = mtime {
+        if let Some(entry) = parse_cache.get(&abs_path, t) {
+            parsed_paths.push(entry.display_path.clone());
+            *current_total_size += entry.content.len();
+            result_blocks.push(FileNode {
+                path: entry.display_path.clone(),
+                content: entry.content.clone(),
+                abs_path: abs_path.to_string_lossy().into_owned(),
+            });
+
+            // 缓存命中时仍需追踪依赖
+            if let Ok(content) = fs::read_to_string(&abs_path) {
+                let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                if !should_ignore(&abs_path, ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes) {
+                    let base_dir = abs_path.parent().unwrap_or(Path::new(""));
+                    for dep in extract_dependencies(&content, ext) {
+                        if let Some(resolved) = resolve_path(base_dir, &dep, ext, base_path) {
+                            process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path,
+                                ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
+                                ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,
+                                included_types, enable_minimization, minimization_threshold, minimization_depth_threshold, current_total_size, abort_handle, parse_cache);
                         }
                     }
                 }
-                return;
             }
+            return;
         }
     }
 
@@ -776,10 +768,8 @@ fn process_file(
         *current_total_size += formatted_content.len();
 
         // 写入缓存（仅当能获取到 mtime 时）
-        if let Some(ref key) = cache_key {
-            if let Ok(mut cache) = parse_cache.lock() {
-                cache.insert(key.clone(), (display_path_str.clone(), formatted_content.clone()));
-            }
+        if let Some(t) = mtime {
+            parse_cache.set(abs_path.clone(), t, display_path_str.clone(), formatted_content.clone());
         }
 
         result_blocks.push(FileNode {
