@@ -99,6 +99,7 @@ const settingsGroups = [
         inputType: 'number',
         label: '压缩触发阈值',
         description: '当生成内容达到该阈值(字符数)时，自动触发深度压缩以节省上下文空间。',
+        step: 1000,
         visible: (settings: any) => settings.enableMinimization === true
       },
       {
