@@ -71,6 +71,25 @@ const DEFAULT_IGNORE_PATTERNS: &[&str] = &[
     ".log", ".tmp", ".temp", ".swp", ".DS_Store"
 ];
 
+/// 已知组件库的 kebab-case 前缀（自动引入扫描时跳过这些标签）
+const COMPONENT_LIB_PREFIXES: &[&str] = &[
+    "el-",    // Element Plus
+    "n-",     // Naive UI
+    "a-",     // Ant Design Vue
+    "van-",   // Vant
+    "q-",     // Quasar
+    "nut-",   // NutUI
+    "wd-",    // Wot Design
+    "t-",     // TDesign
+    "v-",     // Vuetify
+    "md-",    // Material Design
+    "b-",     // Bootstrap Vue
+    "arco-",  // ArcoDesign
+    "vxe-",   // VXE-Table
+    "dp-",    // DatePicker
+    "naive-", // Naive UI alias
+];
+
 
 
 // js/ts: import { ... } from "..." | import "..." | require("...")
@@ -98,6 +117,8 @@ static STR_RE: OnceLock<Regex> = OnceLock::new();
 static HTML_RE: OnceLock<Regex> = OnceLock::new();
 // md: [text](link)
 static MD_RE: OnceLock<Regex> = OnceLock::new();
+// vue tags: <DependencyTreeSidebar ... | <dependency-tree-sidebar ...
+static VUE_TAG_RE: OnceLock<Regex> = OnceLock::new();
 
 // 注释剥离辅助正则
 static C_STYLE_RE: OnceLock<Regex> = OnceLock::new();
@@ -254,6 +275,25 @@ fn get_md_re() -> &'static Regex {
     MD_RE.get_or_init(|| {
         Regex::new(r#"\[[^\]]*\]\(([^)]+)\)"#).unwrap()
     })
+}
+
+fn get_vue_tag_re() -> &'static Regex {
+    VUE_TAG_RE.get_or_init(|| {
+        // 匹配 HTML 标签名
+        Regex::new(r#"(?m)<([a-zA-Z][a-zA-Z0-9-]*)[^>]*"#).unwrap()
+    })
+}
+
+fn kebab_to_pascal(s: &str) -> String {
+    s.split('-')
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        })
+        .collect()
 }
 
 fn extract_dependencies(content: &str, ext: &str) -> Vec<String> {
@@ -453,6 +493,83 @@ fn resolve_path(base_dir: &Path, import_path: &str, ext: &str, project_root: &Pa
     }
 }
 
+/// 检测项目根目录的 package.json 中是否安装了 Vue 自动引入组件插件
+fn detect_auto_import_plugin(root: &Path) -> bool {
+    let pkg_path = root.join("package.json");
+    if let Ok(content) = fs::read_to_string(&pkg_path) {
+        return content.contains("unplugin-vue-components")
+            || content.contains("vite-plugin-components")
+            || content.contains("@vite-plugin-components");
+    }
+    false
+}
+
+/// 扫描项目根目录（排除忽略目录），构建组件名 → 路径的索引
+/// key 为 PascalCase 文件名（不含扩展名），val 为文件路径
+fn build_component_index(
+    root: &Path,
+    ignore_names: &HashSet<String>,
+    ignore_extensions: &HashSet<String>,
+    ignore_filenames: &HashSet<String>,
+    ignore_regexes: &[Regex],
+) -> HashMap<String, PathBuf> {
+    let mut index = HashMap::new();
+    for entry in WalkDir::new(root)
+        .into_iter()
+        // 目录级别剪枝，避免深入 node_modules 等
+        .filter_entry(|e| {
+            if e.file_type().is_dir() {
+                !should_ignore(e.path(), ignore_names, ignore_extensions, ignore_filenames, ignore_regexes)
+            } else {
+                true
+            }
+        })
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+        // 只索引 .vue 文件（自动引入插件的目标）
+        if ext != "vue" { continue; }
+        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+            // 文件名本身已是 PascalCase 时直接存入，忽略 index.vue 等特殊文件
+            if stem == "index" || stem == "Index" { continue; }
+            index.entry(stem.to_string()).or_insert_with(|| path.to_path_buf());
+        }
+    }
+    index
+}
+
+/// 从 Vue 模板中提取出可能是自动引入组件的标签名（转为 PascalCase）
+fn extract_vue_component_tags(content: &str) -> Vec<String> {
+    let tag_re = get_vue_tag_re();
+    let mut seen = HashSet::new();
+    let mut tags = Vec::new();
+    for cap in tag_re.captures_iter(content) {
+        if let Some(m) = cap.get(1) {
+            let tag = m.as_str();
+            // 跳过已知组件库前缀
+            if COMPONENT_LIB_PREFIXES.iter().any(|p| tag.starts_with(p)) {
+                continue;
+            }
+            let pascal = if tag.contains('-') {
+                // kebab-case → PascalCase，例如 my-component → MyComponent
+                kebab_to_pascal(tag)
+            } else {
+                // 如果首字母不大写，视为原生 HTML 标签，直接跳过
+                if !tag.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                    continue;
+                }
+                tag.to_string()
+            };
+            if seen.insert(pascal.clone()) {
+                tags.push(pascal);
+            }
+        }
+    }
+    tags
+}
+
 fn find_project_root(start_path: &Path, manual_roots: &[PathBuf]) -> PathBuf {
     // 1. 如果用户手动指定了根目录，检查当前路径是否在其中之一的子树下
     for mr in manual_roots {
@@ -577,11 +694,32 @@ pub fn analyze_dependencies(
     let (ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes) = 
         parse_ignore_patterns(&ignore_deep_parse, &[]);
 
+    // 每个 project_root 对应的组件索引（懒初始化，避免重复扫描同一根目录）
+    let mut component_indices: HashMap<PathBuf, Option<HashMap<String, PathBuf>>> = HashMap::new();
+
     for p_str in paths {
         let path = Path::new(&p_str);
         if !path.exists() { continue; }
 
         let base_path = find_project_root(path, &manual_roots);
+
+        // 检测是否安装了自动引入插件，按根目录缓存结果
+        let comp_index = component_indices
+            .entry(base_path.clone())
+            .or_insert_with(|| {
+                if detect_auto_import_plugin(&base_path) {
+                    Some(build_component_index(
+                        &base_path,
+                        &ignore_names,
+                        &ignore_extensions,
+                        &ignore_filenames,
+                        &ignore_regexes,
+                    ))
+                } else {
+                    None
+                }
+            })
+            .as_ref();
 
         if path.is_dir() {
             for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
@@ -598,7 +736,7 @@ pub fn analyze_dependencies(
                         process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, 
                             &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes,
                             &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes,
-                            &included_types_set, enable_minimization, minimization_threshold, minimization_depth_threshold, &mut current_total_size, abort_handle.as_ref(), &parse_cache);
+                            &included_types_set, enable_minimization, minimization_threshold, minimization_depth_threshold, &mut current_total_size, abort_handle.as_ref(), &parse_cache, comp_index);
                     }
                 }
             }
@@ -606,7 +744,7 @@ pub fn analyze_dependencies(
             process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, 
                 &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes,
                 &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes,
-                &included_types_set, enable_minimization, minimization_threshold, minimization_depth_threshold, &mut current_total_size, abort_handle.as_ref(), &parse_cache);
+                &included_types_set, enable_minimization, minimization_threshold, minimization_depth_threshold, &mut current_total_size, abort_handle.as_ref(), &parse_cache, comp_index);
         }
     }
 
@@ -681,7 +819,8 @@ fn process_file(
     minimization_depth_threshold: usize,
     current_total_size: &mut usize,
     abort_handle: Option<&Arc<AtomicBool>>,
-    parse_cache: &crate::cache::FileCache
+    parse_cache: &crate::cache::FileCache,
+    component_index: Option<&HashMap<String, PathBuf>>,
 ) {
     if let Some(h) = abort_handle {
         if h.load(Ordering::SeqCst) { return; }
@@ -725,7 +864,20 @@ fn process_file(
                             process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path,
                                 ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
                                 ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,
-                                included_types, enable_minimization, minimization_threshold, minimization_depth_threshold, current_total_size, abort_handle, parse_cache);
+                                included_types, enable_minimization, minimization_threshold, minimization_depth_threshold, current_total_size, abort_handle, parse_cache, component_index);
+                        }
+                    }
+                    // Vue 组件自动引入：通过索引解析模板中未显式 import 的组件
+                    if ext == "vue" {
+                        if let Some(index) = component_index {
+                            for comp_name in extract_vue_component_tags(&content) {
+                                if let Some(comp_path) = index.get(&comp_name) {
+                                    process_file(comp_path, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path,
+                                        ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
+                                        ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,
+                                        included_types, enable_minimization, minimization_threshold, minimization_depth_threshold, current_total_size, abort_handle, parse_cache, component_index);
+                                }
+                            }
                         }
                     }
                 }
@@ -787,7 +939,20 @@ fn process_file(
                     process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path, 
                         ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
                         ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,
-                        included_types, enable_minimization, minimization_threshold, minimization_depth_threshold, current_total_size, abort_handle, parse_cache);
+                        included_types, enable_minimization, minimization_threshold, minimization_depth_threshold, current_total_size, abort_handle, parse_cache, component_index);
+                }
+            }
+            // Vue 组件自动引入：通过索引解析模板中未显式 import 的组件
+            if ext == "vue" {
+                if let Some(index) = component_index {
+                    for comp_name in extract_vue_component_tags(&content) {
+                        if let Some(comp_path) = index.get(&comp_name) {
+                            process_file(comp_path, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path,
+                                ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
+                                ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,
+                                included_types, enable_minimization, minimization_threshold, minimization_depth_threshold, current_total_size, abort_handle, parse_cache, component_index);
+                        }
+                    }
                 }
             }
         }
