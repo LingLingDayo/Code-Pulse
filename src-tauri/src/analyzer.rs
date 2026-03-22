@@ -4,7 +4,8 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 use walkdir::WalkDir;
 
 // js/ts: import { ... } from "..." | import "..." | require("...")
@@ -482,7 +483,16 @@ pub struct FileNode {
     pub abs_path: String,
 }
 
-pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, ignore_exts: String, ignore_deep_parse: String, included_types: Vec<String>, project_roots: String, enable_minimization: bool) -> Result<Vec<FileNode>, String> {
+pub fn analyze_dependencies(
+    paths: Vec<String>, 
+    max_depth: usize, 
+    ignore_exts: String, 
+    ignore_deep_parse: String, 
+    included_types: Vec<String>, 
+    project_roots: String, 
+    enable_minimization: bool,
+    abort_handle: Option<Arc<AtomicBool>>
+) -> Result<Vec<FileNode>, String> {
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut result_blocks: Vec<FileNode> = Vec::new();
     let mut parsed_paths: Vec<String> = Vec::new();
@@ -528,6 +538,9 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, ignore_exts: S
 
         if path.is_dir() {
             for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+                if let Some(ref h) = abort_handle {
+                    if h.load(Ordering::SeqCst) { return Ok(result_blocks); }
+                }
                 let e_path = entry.path();
                 if e_path.is_file() {
                     let ext = e_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
@@ -538,7 +551,7 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, ignore_exts: S
                         process_file(e_path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, 
                             &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes,
                             &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes,
-                            &included_types_set, enable_minimization);
+                            &included_types_set, enable_minimization, abort_handle.as_ref());
                     }
                 }
             }
@@ -546,7 +559,7 @@ pub fn analyze_dependencies(paths: Vec<String>, max_depth: usize, ignore_exts: S
             process_file(path, 0, max_depth, &mut visited, &mut result_blocks, &mut parsed_paths, &base_path, 
                 &ignore_names, &ignore_extensions, &ignore_filenames, &ignore_regexes,
                 &ignore_deep_names, &ignore_deep_extensions, &ignore_deep_filenames, &ignore_deep_regexes,
-                &included_types_set, enable_minimization);
+                &included_types_set, enable_minimization, abort_handle.as_ref());
         }
     }
 
@@ -616,8 +629,12 @@ fn process_file(
     ignore_deep_filenames: &HashSet<String>,
     ignore_deep_regexes: &[Regex],
     included_types: &HashSet<String>,
-    enable_minimization: bool
+    enable_minimization: bool,
+    abort_handle: Option<&Arc<AtomicBool>>
 ) {
+    if let Some(h) = abort_handle {
+        if h.load(Ordering::SeqCst) { return; }
+    }
     if current_depth > max_depth || !path.exists() { return; }
     
     let abs_path = match path.canonicalize() { Ok(p) => p, Err(_) => return };
@@ -678,7 +695,7 @@ fn process_file(
                     process_file(&resolved, current_depth + 1, max_depth, visited, result_blocks, parsed_paths, base_path, 
                         ignore_names, ignore_extensions, ignore_filenames, ignore_regexes,
                         ignore_deep_names, ignore_deep_extensions, ignore_deep_filenames, ignore_deep_regexes,
-                        included_types, enable_minimization);
+                        included_types, enable_minimization, abort_handle);
                 }
             }
         }

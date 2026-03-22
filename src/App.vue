@@ -20,8 +20,15 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Worker 实例：字符串拼接全部在独立线程执行，主线程不卡
 const contextWorker = new ContextWorker();
-contextWorker.onmessage = (e: MessageEvent<string>) => {
-    outputContext.value = e.data;
+const currentRequestId = ref(0);
+
+contextWorker.onmessage = (e: MessageEvent<{requestId?: number, content: string}>) => {
+    const { requestId, content } = e.data;
+    // 校验 requestId，如果已被中断或有新任务，则忽略
+    if (requestId !== undefined && requestId !== currentRequestId.value) {
+        return;
+    }
+    outputContext.value = content;
     isLoading.value = false;
 };
 contextWorker.onerror = (e) => {
@@ -127,6 +134,7 @@ onUnmounted(() => {
 
 async function processPaths(paths: string[]) {
   if (paths.length === 0) return;
+  const requestId = ++currentRequestId.value;
   isLoading.value = true;
   try {
     const customTypesArray = appConfig.customIncludedTypes
@@ -147,6 +155,9 @@ async function processPaths(paths: string[]) {
       enableMinimization: appConfig.enableMinimization,
     });
     
+    // 中断检查
+    if (requestId !== currentRequestId.value) return;
+
     fileNodes.value = result.map(node => {
         const normalize = (p: string) => p.replace(/\\/g, '/').toLowerCase().trim().replace(/^\\\\?\\/, '').replace(/^\/\/\?\//, '').replace(/\/+$/, '');
         const nNodeAbs = normalize(node.abs_path);
@@ -160,22 +171,31 @@ async function processPaths(paths: string[]) {
     });
     
     // 将耗时的字符串拼接调度到 Worker 线程，主线程立即释放
-    updateOutputContext();
+    updateOutputContext(requestId);
   } catch (error) {
+    if (requestId !== currentRequestId.value) return;
     console.error("Failed to generate context:", error);
     outputContext.value = `Error: ${error}`;
     isLoading.value = false;
   }
 }
 
-function updateOutputContext() {
+function stopProcessing() {
+    currentRequestId.value++;
+    isLoading.value = false;
+    invoke("abort_generate_context").catch(e => console.error("Failed to abort:", e));
+}
+
+function updateOutputContext(requestId?: number) {
     if (fileNodes.value.length === 0) {
         outputContext.value = "";
         return;
     }
+    const rid = requestId ?? ++currentRequestId.value;
     // 将所有数据发给 Worker，主线程立即返回，字符串拼接在后台线程执行
     // isLoading 的 false 由 worker.onmessage 回调负责关闭
     contextWorker.postMessage({
+        requestId: rid,
         fileNodes: fileNodes.value.map(n => ({ path: n.path, content: n.content })),
         generateTree: appConfig.generateTree,
         customPrompt: appConfig.customPrompt,
@@ -388,13 +408,14 @@ function handleWheel(e: WheelEvent) {
     <!-- Generate Control Area -->
     <div class="w-full max-w-6xl mb-8 flex justify-center shrink-0">
         <button 
-          @click="processPaths(filesList.map(f => f.path))"
-          :disabled="filesList.length === 0 || isLoading"
+          @click="isLoading ? stopProcessing() : processPaths(filesList.map(f => f.path))"
+          :disabled="filesList.length === 0"
           class="h-14 px-10 group/btn bg-app-text hover:bg-app-primary text-app-bg font-black rounded-2xl shadow-xl shadow-app-text/10 transition-all active:scale-95 disabled:opacity-20 disabled:cursor-not-allowed flex items-center gap-3 cursor-pointer"
+          :class="isLoading ? 'hover:bg-app-rose!' : ''"
         >
           <span v-if="isLoading" class="flex items-center gap-4">
               <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-              深度构建中...
+              构建中 (点击中断)...
           </span>
           <span v-else class="flex items-center gap-4">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform group-hover/btn:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>

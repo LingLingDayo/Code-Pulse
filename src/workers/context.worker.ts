@@ -1,4 +1,5 @@
 export interface WorkerInput {
+  requestId?: number;
   fileNodes: { path: string; content: string }[];
   generateTree: boolean;
   customPrompt: string;
@@ -8,10 +9,10 @@ export interface WorkerInput {
 
 // 所有耗时的字符串拼接全部在 Worker 线程执行，主线程不受影响
 self.onmessage = (e: MessageEvent<WorkerInput>) => {
-  const { fileNodes, generateTree, customPrompt, userPrompt, longContextThreshold } = e.data;
+  const { requestId, fileNodes, generateTree, customPrompt, userPrompt, longContextThreshold } = e.data;
 
   if (fileNodes.length === 0) {
-    self.postMessage('');
+    self.postMessage({ requestId, content: '' });
     return;
   }
 
@@ -65,5 +66,5 @@ self.onmessage = (e: MessageEvent<WorkerInput>) => {
     finalContext += PENDING_USER_PROMPT;
   }
 
-  self.postMessage(finalContext);
+  self.postMessage({ requestId, content: finalContext });
 };
