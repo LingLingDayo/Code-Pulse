@@ -62,6 +62,13 @@ const toggleGroup = (groupId: string) => {
 };
 
 const isExpanded = (groupId: string) => expandedGroups.value.includes(groupId);
+
+// 根据 item.visible 判断是否渲染该控件
+const isItemVisible = (item: any): boolean => {
+  if (item.visible === undefined) return true;
+  if (typeof item.visible === 'function') return item.visible(localSettings);
+  return !!item.visible;
+};
 </script>
 
 <template>
@@ -106,7 +113,7 @@ const isExpanded = (groupId: string) => expandedGroups.value.includes(groupId);
             
             <div v-show="isExpanded(group.id)" class="space-y-6 animate-in slide-in-from-top-2 duration-500">
               <template v-for="item in group.items" :key="item.id">
-                <DynamicControl :config="item" v-model="localSettings[item.id]" />
+                <DynamicControl v-if="isItemVisible(item)" :config="item" v-model="localSettings[item.id]" />
               </template>
             </div>
           </div>
